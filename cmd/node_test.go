@@ -7,9 +7,7 @@ import (
 	"time"
 )
 
-func (a Address) String() string {
-	return fmt.Sprintf("%s:%d", a.IP, a.Port)
-}
+// Removed duplicate Address.String method to avoid conflict with the existing declaration.
 
 func TestHelloworld(t *testing.T) {
 	// Create network and nodes

@@ -7,6 +7,10 @@ type Address struct {
 	Port int // 1-65535
 }
 
+func (a Address) String() string {
+	return fmt.Sprintf("%s:%d", a.IP, a.Port)
+}
+
 type Network interface {
 	Listen(addr Address) (Connection, error)
 	Dial(addr Address) (Connection, error)

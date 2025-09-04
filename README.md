@@ -1,3 +1,8 @@
+#Docker Instructions
+docker build . -t kadlab:latest
+docker compose up --scale kademliaNode=50 -d   (number of nodes)
+docker compose ps                               (Check running)
+
 # Go Project Template
 
 This repository provides example code for setting up an empty Go project following best practices.

@@ -1,8 +1,10 @@
 package main
 
 import (
-	"github.com/eislab-cps/go-template/internal/cli"
-	"github.com/eislab-cps/go-template/pkg/build"
+	"fmt"
+	"os"
+
+	"github.com/Stromo01/D7024E/pkg/build"
 )
 
 var (
@@ -13,5 +15,14 @@ var (
 func main() {
 	build.BuildVersion = BuildVersion
 	build.BuildTime = BuildTime
-	cli.Execute()
+
+	nodeID := os.Getenv("NODE_ID")
+	if nodeID == "" {
+		nodeID, _ = os.Hostname()
+	}
+	nodePort := os.Getenv("NODE_PORT")
+	fmt.Println("Node ID:", nodeID)
+	fmt.Println("Node Port:", nodePort)
+
+	//cli.Execute()
 }

@@ -2,8 +2,7 @@ package cli
 
 import (
 	"fmt"
-
-	"github.com/eislab-cps/go-template/pkg/build"
+	"github.com/Stromo01/D7024E/pkg/build"
 	"github.com/spf13/cobra"
 )
 

@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/Stromo01/D7024E/pkg/build"
 )
@@ -23,6 +24,5 @@ func main() {
 	nodePort := os.Getenv("NODE_PORT")
 	fmt.Println("Node ID:", nodeID)
 	fmt.Println("Node Port:", nodePort)
-
-	//cli.Execute()
+	time.Sleep(time.Hour)
 }

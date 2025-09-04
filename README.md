@@ -1,4 +1,4 @@
-#Docker Instructions
+# Docker Instructions
 docker build . -t kadlab:latest
 docker compose up --scale kademliaNode=50 -d   (number of nodes)
 docker compose ps                               (Check running)

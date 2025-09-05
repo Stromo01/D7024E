@@ -423,3 +423,75 @@ func TestRequestResponsePattern(t *testing.T) {
 
 	t.Log("Request-response pattern test completed successfully")
 }
+
+func TestAllNodesCanPingEachOther(t *testing.T) {
+	const numNodes = 5 // Change to desired number of nodes
+	network := NewMockNetwork()
+	nodes := make([]*Node, numNodes)
+	addresses := make([]Address, numNodes)
+	received := make([][]bool, numNodes)
+
+	// Create nodes and addresses
+	for i := 0; i < numNodes; i++ {
+		addr := Address{IP: "127.0.0.1", Port: 8000 + i}
+		node, err := NewNode(network, addr)
+		if err != nil {
+			t.Fatalf("Failed to create node %d: %v", i, err)
+		}
+		nodes[i] = node
+		addresses[i] = addr
+		received[i] = make([]bool, numNodes)
+	}
+
+	// Each node handles pings and marks received
+	for i, node := range nodes {
+		idx := i
+		node.Handle("ping", func(msg Message) error {
+			fromIdx := -1
+			for j, addr := range addresses {
+				if addr == msg.From {
+					fromIdx = j
+					break
+				}
+			}
+			if fromIdx >= 0 {
+				received[idx][fromIdx] = true
+			}
+			return nil
+		})
+	}
+
+	// Start all nodes
+	for _, node := range nodes {
+		node.Start()
+	}
+
+	// Each node sends ping to every other node
+	for i, node := range nodes {
+		for j, addr := range addresses {
+			if i != j {
+				err := node.SendString(addr, "ping", "Hello!")
+				if err != nil {
+					t.Errorf("Node %d failed to ping node %d: %v", i, j, err)
+				}
+			}
+		}
+	}
+
+	// Wait for messages to be processed
+	time.Sleep(1 * time.Second)
+
+	// Check that every node received a ping from every other node
+	for i := 0; i < numNodes; i++ {
+		for j := 0; j < numNodes; j++ {
+			if i != j && !received[i][j] {
+				t.Errorf("Node %d did not receive ping from node %d", i, j)
+			}
+		}
+	}
+
+	// Clean up
+	for _, node := range nodes {
+		node.Close()
+	}
+}

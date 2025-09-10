@@ -1,10 +1,89 @@
 package main
 
 import (
+	"crypto/sha1"
 	"fmt"
 	"log"
+	"math/big"
+	"sort"
 	"sync"
 )
+
+// XOR distance between two keys (as hex strings)
+// Removed duplicate definition of xorDistance
+
+type Node struct {
+	addr       Address
+	network    Network
+	connection Connection
+	handlers   map[string]MessageHandler
+	contacts   []Address         // List of known contacts
+	store      map[string][]byte // Object store: key (hash) -> value
+	mu         sync.RWMutex
+	closed     bool
+	closeMu    sync.RWMutex
+}
+
+// XOR distance between two keys (as hex strings)
+func xorDistance(a, b string) *big.Int {
+	aBytes := sha1.Sum([]byte(a))
+	bBytes := sha1.Sum([]byte(b))
+	aInt := new(big.Int).SetBytes(aBytes[:])
+	bInt := new(big.Int).SetBytes(bBytes[:])
+	return new(big.Int).Xor(aInt, bInt)
+}
+
+// FindKClosest returns the K closest contacts to the given key
+func (n *Node) FindKClosest(key string, k int) []Address {
+	n.mu.RLock()
+	defer n.mu.RUnlock()
+	type distAddr struct {
+		dist *big.Int
+		addr Address
+	}
+	var all []distAddr
+	for _, c := range n.contacts {
+		d := xorDistance(key, c.String())
+		all = append(all, distAddr{dist: d, addr: c})
+	}
+	// Sort by distance
+	sort.Slice(all, func(i, j int) bool {
+		return all[i].dist.Cmp(all[j].dist) < 0
+	})
+	var result []Address
+	for i := 0; i < k && i < len(all); i++ {
+		result = append(result, all[i].addr)
+	}
+	return result
+}
+
+// StoreAtK stores an object at the K closest nodes (including self if applicable)
+func (n *Node) StoreAtK(key string, value []byte, k int) {
+	closest := n.FindKClosest(key, k)
+	for _, addr := range closest {
+		if addr == n.addr {
+			n.StoreObject(key, value)
+		} else {
+			payload := []byte(key + ":" + string(value))
+			n.Send(addr, "store", payload)
+		}
+	}
+}
+
+// StoreObject stores a value by key (hash)
+func (n *Node) StoreObject(key string, value []byte) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	n.store[key] = value
+}
+
+// FindObject retrieves a value by key (hash)
+func (n *Node) FindObject(key string) ([]byte, bool) {
+	n.mu.RLock()
+	defer n.mu.RUnlock()
+	val, ok := n.store[key]
+	return val, ok
+}
 
 // FindNode returns the contact Address if present, else nil
 func (n *Node) FindNode(addr Address) *Address {
@@ -16,18 +95,6 @@ func (n *Node) FindNode(addr Address) *Address {
 		}
 	}
 	return nil
-}
-
-// Node provides a unified abstraction for both sending and receiving messages
-type Node struct {
-	addr       Address
-	network    Network
-	connection Connection
-	handlers   map[string]MessageHandler
-	contacts   []Address // List of known contacts
-	mu         sync.RWMutex
-	closed     bool
-	closeMu    sync.RWMutex
 }
 
 // MessageHandler is a function that processes incoming messages
@@ -46,7 +113,29 @@ func NewNode(network Network, addr Address) (*Node, error) {
 		connection: connection,
 		handlers:   make(map[string]MessageHandler),
 		contacts:   []Address{},
+		store:      make(map[string][]byte),
 	}
+
+	// Register STORE handler to accept and store objects
+	node.Handle("store", func(msg Message) error {
+		// Expect payload as "key:value"
+		payload := string(msg.Payload)
+		sep := -1
+		for i, c := range payload {
+			if c == ':' {
+				sep = i
+				break
+			}
+		}
+		if sep == -1 {
+			return fmt.Errorf("invalid store payload, missing ':' separator")
+		}
+		key := payload[:sep]
+		value := []byte(payload[sep+1:])
+		node.StoreObject(key, value)
+		fmt.Printf("Node %s stored object with key %s from %s\n", node.Address().String(), key, msg.From.String())
+		return nil
+	})
 
 	// Register PING handler to add sender to contacts and reply with PONG
 	node.Handle(MsgPing, func(msg Message) error {
@@ -122,6 +211,8 @@ func (n *Node) Start() {
 				for i, char := range payload {
 					if char == ':' {
 						msgType = payload[:i]
+						// Pass only the payload after the first colon to the handler
+						msg.Payload = []byte(payload[i+1:])
 						break
 					}
 				}

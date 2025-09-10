@@ -629,3 +629,93 @@ func TestAllNodesCanPingEachOther(t *testing.T) {
 		node.Close()
 	}
 }
+
+func TestDistributedObjectStorage(t *testing.T) {
+	// Setup: create a small network of 3 nodes
+	network := NewMockNetwork()
+	addresses := []Address{
+		{IP: "127.0.0.1", Port: 9301},
+		{IP: "127.0.0.1", Port: 9302},
+		{IP: "127.0.0.1", Port: 9303},
+	}
+	nodes := make([]*Node, 3)
+	for i, addr := range addresses {
+		n, err := NewNode(network, addr)
+		if err != nil {
+			t.Fatalf("Failed to create node %d: %v", i, err)
+		}
+		nodes[i] = n
+		n.Start()
+	}
+
+	// Connect nodes: join each node to the first node
+	for i := 1; i < len(nodes); i++ {
+		err := nodes[i].JoinNetwork(addresses[0])
+		if err != nil {
+			t.Fatalf("Node %d failed to join network: %v", i, err)
+		}
+	}
+
+	// Wait for network to stabilize
+	time.Sleep(300 * time.Millisecond)
+
+	// Debug: print contacts for each node
+	for i, n := range nodes {
+		n.mu.RLock()
+		fmt.Printf("Node %d contacts: %v\n", i, n.contacts)
+		n.mu.RUnlock()
+	}
+
+	// Store an object from node 0 using StoreAtK
+	key := "testkey"
+	value := []byte("testvalue")
+	nodes[0].StoreAtK(key, value, 2)
+
+	// Wait for store propagation
+	time.Sleep(300 * time.Millisecond)
+
+	// Debug: print K closest nodes
+	K := 2
+	closest := nodes[0].FindKClosest(key, K)
+	fmt.Printf("K closest nodes to key '%s': %v\n", key, closest)
+
+	// Check that the object is stored at the K=2 closest nodes
+	foundCount := 0
+	for _, addr := range closest {
+		for _, n := range nodes {
+			if n.addr == addr {
+				n.mu.RLock()
+				stored, ok := n.store[key]
+				n.mu.RUnlock()
+				if ok && string(stored) == string(value) {
+					foundCount++
+				}
+			}
+		}
+	}
+	if foundCount != K {
+		t.Errorf("Object not stored at K=%d closest nodes, found at %d", K, foundCount)
+	}
+
+	// Check retrieval from K closest nodes only
+	for i, n := range nodes {
+		isClosest := false
+		for _, addr := range closest {
+			if n.addr == addr {
+				isClosest = true
+				break
+			}
+		}
+		if isClosest {
+			got, ok := n.FindObject(key)
+			if !ok || string(got) != string(value) {
+				t.Errorf("Node %d (%s) could not retrieve stored object", i, n.addr.String())
+			}
+		}
+	}
+
+	// Clean up
+	for _, n := range nodes {
+		n.Close()
+	}
+}

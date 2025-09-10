@@ -6,12 +6,25 @@ import (
 	"sync"
 )
 
+// FindNode returns the contact Address if present, else nil
+func (n *Node) FindNode(addr Address) *Address {
+	n.mu.RLock()
+	defer n.mu.RUnlock()
+	for _, c := range n.contacts {
+		if c == addr {
+			return &c
+		}
+	}
+	return nil
+}
+
 // Node provides a unified abstraction for both sending and receiving messages
 type Node struct {
 	addr       Address
 	network    Network
 	connection Connection
 	handlers   map[string]MessageHandler
+	contacts   []Address // List of known contacts
 	mu         sync.RWMutex
 	closed     bool
 	closeMu    sync.RWMutex
@@ -27,12 +40,51 @@ func NewNode(network Network, addr Address) (*Node, error) {
 		return nil, fmt.Errorf("failed to create node: %v", err)
 	}
 
-	return &Node{
+	node := &Node{
 		addr:       addr,
 		network:    network,
 		connection: connection,
 		handlers:   make(map[string]MessageHandler),
-	}, nil
+		contacts:   []Address{},
+	}
+
+	// Register PING handler to add sender to contacts and reply with PONG
+	node.Handle(MsgPing, func(msg Message) error {
+		node.addContact(msg.From)
+		fmt.Printf("Node %s received PING from %s\n", node.Address().String(), msg.From.String())
+		return node.Send(msg.From, MsgPong, []byte("pong"))
+	})
+
+	// Register PONG handler (for logging and adding contact)
+	node.Handle(MsgPong, func(msg Message) error {
+		node.addContact(msg.From)
+		fmt.Printf("Node %s received PONG from %s\n", node.Address().String(), msg.From.String())
+		return nil
+	})
+
+	return node, nil
+}
+
+// Add contact if not already present
+func (n *Node) addContact(addr Address) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	for _, c := range n.contacts {
+		if c == addr {
+			return
+		}
+	}
+	n.contacts = append(n.contacts, addr)
+}
+
+// JoinNetwork: send PING to known node and add to contacts
+func (n *Node) JoinNetwork(known Address) error {
+	err := n.Send(known, MsgPing, []byte("ping"))
+	if err != nil {
+		return fmt.Errorf("failed to join network: %v", err)
+	}
+	// Contact will be added when PONG is received
+	return nil
 }
 
 // Handle registers a message handler for a specific message type

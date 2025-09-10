@@ -7,6 +7,140 @@ import (
 	"time"
 )
 
+func TestNodeLookup(t *testing.T) {
+	network := NewMockNetwork()
+	addrA := Address{IP: "127.0.0.1", Port: 9201}
+	addrB := Address{IP: "127.0.0.1", Port: 9202}
+	nodeA, err := NewNode(network, addrA)
+	if err != nil {
+		t.Fatalf("Failed to create nodeA: %v", err)
+	}
+	nodeB, err := NewNode(network, addrB)
+	if err != nil {
+		t.Fatalf("Failed to create nodeB: %v", err)
+	}
+
+	nodeA.Start()
+	nodeB.Start()
+
+	// NodeA joins network via NodeB
+	err = nodeA.JoinNetwork(addrB)
+	if err != nil {
+		t.Fatalf("NodeA failed to join network: %v", err)
+	}
+
+	// Wait for PONG and contact update
+	time.Sleep(200 * time.Millisecond)
+
+	// NodeA should be able to look up NodeB
+	found := nodeA.FindNode(addrB)
+	if found == nil {
+		t.Errorf("NodeA could not find NodeB after joining")
+	}
+
+	// NodeB should be able to look up NodeA
+	found = nodeB.FindNode(addrA)
+	if found == nil {
+		t.Errorf("NodeB could not find NodeA after being joined")
+	}
+
+	nodeA.Close()
+	nodeB.Close()
+}
+
+func TestNetworkJoining(t *testing.T) {
+	network := NewMockNetwork()
+	addrA := Address{IP: "127.0.0.1", Port: 9101}
+	addrB := Address{IP: "127.0.0.1", Port: 9102}
+	nodeA, err := NewNode(network, addrA)
+	if err != nil {
+		t.Fatalf("Failed to create nodeA: %v", err)
+	}
+	nodeB, err := NewNode(network, addrB)
+	if err != nil {
+		t.Fatalf("Failed to create nodeB: %v", err)
+	}
+
+	nodeA.Start()
+	nodeB.Start()
+
+	// NodeA joins network via NodeB
+	err = nodeA.JoinNetwork(addrB)
+	if err != nil {
+		t.Fatalf("NodeA failed to join network: %v", err)
+	}
+
+	// Wait for PONG and contact update
+	time.Sleep(200 * time.Millisecond)
+
+	foundA := false
+	foundB := false
+	for _, c := range nodeA.contacts {
+		if c == addrB {
+			foundB = true
+		}
+	}
+	for _, c := range nodeB.contacts {
+		if c == addrA {
+			foundA = true
+		}
+	}
+	if !foundB {
+		t.Errorf("NodeA did not add NodeB to contacts after joining")
+	}
+	if !foundA {
+		t.Errorf("NodeB did not add NodeA to contacts after being joined")
+	}
+
+	nodeA.Close()
+	nodeB.Close()
+}
+
+func TestPingPong(t *testing.T) {
+	network := NewMockNetwork()
+	addrA := Address{IP: "127.0.0.1", Port: 9001}
+	addrB := Address{IP: "127.0.0.1", Port: 9002}
+	nodeA, err := NewNode(network, addrA)
+	if err != nil {
+		t.Fatalf("Failed to create nodeA: %v", err)
+	}
+	nodeB, err := NewNode(network, addrB)
+	if err != nil {
+		t.Fatalf("Failed to create nodeB: %v", err)
+	}
+
+	pongReceived := make(chan struct{}, 1)
+
+	nodeB.Handle(MsgPing, func(msg Message) error {
+		// Reply with PONG
+		return nodeB.Send(msg.From, MsgPong, []byte("pong"))
+	})
+
+	nodeA.Handle(MsgPong, func(msg Message) error {
+		pongReceived <- struct{}{}
+		return nil
+	})
+
+	nodeA.Start()
+	nodeB.Start()
+
+	// NodeA sends PING to NodeB
+	err = nodeA.Send(addrB, MsgPing, []byte("ping"))
+	if err != nil {
+		t.Fatalf("NodeA failed to send PING: %v", err)
+	}
+
+	select {
+	case <-pongReceived:
+		// Success
+	case <-time.After(1 * time.Second):
+		t.Fatal("NodeA did not receive PONG from NodeB")
+	}
+
+	nodeA.Close()
+	nodeB.Close()
+}
+
 // Removed duplicate Address.String method to avoid conflict with the existing declaration.
 
 func TestHelloworld(t *testing.T) {

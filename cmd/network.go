@@ -1,6 +1,29 @@
+
 package main
 
 import "fmt"
+
+// Kademlia message types
+const (
+	MsgPing = "PING"
+	MsgPong = "PONG"
+)
+
+// Helper to send a PING message from one node to another
+func SendPing(network Network, from, to Address) error {
+	msg := Message{
+		From:    from,
+		To:      to,
+		Payload: []byte(MsgPing),
+		network: network,
+	}
+	conn, err := network.Dial(to)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+	return conn.Send(msg)
+}
 
 type Address struct {
 	IP   string

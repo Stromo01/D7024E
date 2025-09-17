@@ -1,11 +1,14 @@
 package main
 
 import (
+	"crypto/rand"
 	"crypto/sha1"
 	"fmt"
 	"log"
 	"math/big"
 	"sort"
+	"strconv"
+	"strings"
 	"sync"
 )
 
@@ -13,6 +16,7 @@ import (
 // Removed duplicate definition of xorDistance
 
 type Node struct {
+	id         [20]byte // 160 bits
 	addr       Address
 	network    Network
 	connection Connection
@@ -23,6 +27,8 @@ type Node struct {
 	closed     bool
 	closeMu    sync.RWMutex
 }
+
+const K = 8 // Kademlia bucket size and number of closest nodes to return
 
 // XOR distance between two keys (as hex strings)
 func xorDistance(a, b string) *big.Int {
@@ -52,6 +58,7 @@ func (n *Node) FindKClosest(key string, k int) []Address {
 	})
 	var result []Address
 	for i := 0; i < k && i < len(all); i++ {
+
 		result = append(result, all[i].addr)
 	}
 	return result
@@ -106,8 +113,13 @@ func NewNode(network Network, addr Address) (*Node, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to create node: %v", err)
 	}
-
+	var id [20]byte
+	_, err = rand.Read(id[:])
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate node ID: %v", err)
+	}
 	node := &Node{
+		id:         id,
 		addr:       addr,
 		network:    network,
 		connection: connection,
@@ -151,7 +163,61 @@ func NewNode(network Network, addr Address) (*Node, error) {
 		return nil
 	})
 
+	node.Handle("find_node", func(msg Message) error {
+		// Expect payload as "key"
+		key := string(msg.Payload)
+		closest := node.FindKClosest(key, K) // Return K closest nodes
+		// Serialize closest []Address to a comma-separated string
+		var respPayload string
+		for i, addr := range closest {
+			if i > 0 {
+				respPayload += ","
+			}
+			respPayload += addr.String()
+		}
+		return node.Send(msg.From, "find_node_response", []byte(respPayload))
+	})
+	node.Handle("find_node_response", func(msg Message) error {
+		// Expect payload as "addr1,addr2,..."
+		payload := string(msg.Payload)
+		if payload != "" {
+			addrStrs := strings.Split(payload, ",")
+			for _, s := range addrStrs {
+				if s != "" {
+					// Properly parse address string "IP:Port"
+					parts := strings.Split(s, ":")
+					if len(parts) == 2 {
+						port, err := strconv.Atoi(parts[1])
+						if err != nil {
+							continue
+						}
+						node.addContact(Address{IP: parts[0], Port: port})
+					}
+				}
+			}
+		}
+		return nil
+	})
+
+	node.Handle("find_value", func(msg Message) error {
+		// Expect payload as "key"
+		key := string(msg.Payload)
+		if val, ok := node.FindObject(key); ok {
+			return node.Send(msg.From, "find_value_response", val)
+		}
+		closest := node.FindKClosest(key, 5)
+		var respPayload string
+		for i, addr := range closest {
+			if i > 0 {
+				respPayload += ","
+			}
+			respPayload += addr.String()
+		}
+		return node.Send(msg.From, "find_value_response", []byte(respPayload))
+	})
+
 	return node, nil
+
 }
 
 // Add contact if not already present

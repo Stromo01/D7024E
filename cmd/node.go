@@ -28,7 +28,8 @@ type Node struct {
 	closeMu    sync.RWMutex
 }
 
-const K = 8 // Kademlia bucket size and number of closest nodes to return
+const K = 8     // Kademlia bucket size and number of closest nodes to return
+const Alpha = 3 // Concurrency in lookups
 
 // XOR distance between two keys (as hex strings)
 func xorDistance(a, b string) *big.Int {
@@ -166,7 +167,7 @@ func NewNode(network Network, addr Address) (*Node, error) {
 	node.Handle("find_node", func(msg Message) error {
 		// Expect payload as "key"
 		key := string(msg.Payload)
-		closest := node.FindKClosest(key, K) // Return K closest nodes
+		closest := node.NodeLookup(key) // Return K closest nodes
 		// Serialize closest []Address to a comma-separated string
 		var respPayload string
 		for i, addr := range closest {
@@ -204,20 +205,102 @@ func NewNode(network Network, addr Address) (*Node, error) {
 		key := string(msg.Payload)
 		if val, ok := node.FindObject(key); ok {
 			return node.Send(msg.From, "find_value_response", val)
-		}
-		closest := node.FindKClosest(key, 5)
-		var respPayload string
-		for i, addr := range closest {
-			if i > 0 {
-				respPayload += ","
+		} else {
+			closest := node.FindKClosest(key, K)
+			var respPayload string
+			for i, addr := range closest {
+				if i > 0 {
+					respPayload += ","
+				}
+				respPayload += addr.String()
 			}
-			respPayload += addr.String()
+			return node.Send(msg.From, "find_value_response", []byte(respPayload))
 		}
-		return node.Send(msg.From, "find_value_response", []byte(respPayload))
 	})
-
 	return node, nil
 
+}
+
+// NodeLookup performs an asynchronous, parallel node lookup for the given key.
+func (n *Node) NodeLookup(targetKey string) []Address {
+	type lookupResult struct {
+		from  Address
+		addrs []Address
+	}
+	queried := make(map[string]bool)
+	shortlist := n.FindKClosest(targetKey, K)
+	result := make([]Address, 0, K)
+	resultMap := make(map[string]bool)
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+	results := make(chan lookupResult, 100)
+
+	// Helper to launch a find_node query
+	query := func(addr Address) {
+		defer wg.Done()
+		// Send find_node request
+		n.Send(addr, "find_node", []byte(targetKey))
+		// Wait for response (simulate with a handler or callback in real code)
+		// Here, we assume the handler for "find_node_response" updates contacts
+		// and we simulate a response by returning known contacts
+		closest := n.FindKClosest(targetKey, K)
+		results <- lookupResult{from: addr, addrs: closest}
+	}
+
+	// Start up to Alpha parallel queries
+	launchQueries := func(addrs []Address) {
+		count := 0
+		for _, addr := range addrs {
+			if !queried[addr.String()] && addr != n.addr {
+				queried[addr.String()] = true
+				wg.Add(1)
+				go query(addr)
+				count++
+				if count >= Alpha {
+					break
+				}
+			}
+		}
+	}
+
+	launchQueries(shortlist)
+
+	for {
+		wg.Wait()
+		close(results)
+
+		// Collect results and update shortlist
+		newShortlist := []Address{}
+		for res := range results {
+			for _, addr := range res.addrs {
+				mu.Lock()
+				if !resultMap[addr.String()] && addr != n.addr {
+					result = append(result, addr)
+					resultMap[addr.String()] = true
+					newShortlist = append(newShortlist, addr)
+					if len(result) >= K {
+						mu.Unlock()
+						return result[:K]
+					}
+				}
+				mu.Unlock()
+			}
+		}
+
+		if len(newShortlist) == 0 {
+			break
+		}
+
+		// Reset for next round
+		results = make(chan lookupResult, 100)
+		wg = sync.WaitGroup{}
+		launchQueries(newShortlist)
+	}
+
+	if len(result) > K {
+		return result[:K]
+	}
+	return result
 }
 
 // Add contact if not already present

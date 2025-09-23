@@ -42,33 +42,6 @@ func xorDistance(a, b []byte) *big.Int {
 	return new(big.Int).Xor(aInt, bInt)
 }
 
-/*
-// FindKClosest returns the K closest contacts to the given key
-func (n *Node) FindKClosest(key string, k int) []Triple {
-	n.mu.RLock()
-	defer n.mu.RUnlock()
-	type distTriple struct {
-		dist   *big.Int
-		triple Triple
-	}
-	var all []distTriple
-	for _, c := range n.routing. {
-		keyBytes := []byte(key)
-		d := xorDistance(keyBytes, c.ID)
-		all = append(all, distTriple{dist: d, triple: c})
-	}
-	// Sort by distance
-	sort.Slice(all, func(i, j int) bool {
-		return all[i].dist.Cmp(all[j].dist) < 0
-	})
-	var result []Triple
-	for i := 0; i < k && i < len(all); i++ {
-
-		result = append(result, all[i].triple)
-	}
-	return result
-}
-*/
 // StoreAtK stores an object at the K closest nodes (including self if applicable)
 func (n *Node) StoreAtK(key string, value []byte, k int) {
 	closest := n.routing.getKClosest(key)
@@ -234,134 +207,107 @@ func tripleSerialize(triples []Triple) string {
 	return respPayload
 }
 
-
-
 func (n *Node) nodeLookup(key string) []Triple {
-	search := n.routing.getKClosest(key)
-	closestNode := search[0]
-	shortlist := search[:Alpha]
-
-	var wg sync.WaitGroup
-	responses := make(chan []Triple, len(shortlist))
-
-	for _, contact := range shortlist {
-		if contact.Addr == n.addr {
-			continue
-		}
-		wg.Add(1)
-		go func(c Triple) {
-			defer wg.Done()
-			// Send find_node RPC and save it in result
-			var result []Triple = 
-			shortlist = append(shortlist, result...)
-
-			resp := n.routing.getKClosest(key)
-			responses <- resp
-		}(contact)
-	}
-
-	wg.Wait()
-	close(responses)
-
-	// Optionally, aggregate responses here if needed
-
-
-	return shortlist
-}
-
-
-
-
-
-
-/*
-// NodeLookup performs an asynchronous, parallel node lookup for the given key.
-func (n *Node) NodeLookup(targetKey string) []Triple {
-	type lookupResult struct {
-		from  Address
-		addrs []Address
-	}
-	queried := make(map[string]bool)
-	shortlist := n.FindKClosest(targetKey, K)
-	result := make([]Address, 0, K)
-	resultMap := make(map[string]bool)
+	// Generate unique lookup ID for this specific lookup
+	lookupID := fmt.Sprintf("lookup_%d", time.Now().UnixNano())
+	
+	// Channel to receive responses for this specific lookup
+	responseChannel := make(chan []Triple, Alpha*K)
+	pendingRequests := 0
 	var mu sync.Mutex
-	var wg sync.WaitGroup
-	results := make(chan lookupResult, 100)
-
-	// Helper to launch a find_node query
-	query := func(addr Address) {
-		defer wg.Done()
-		// Send find_node request
-		n.Send(addr, "find_node", []byte(targetKey))
-		// Wait for response (simulate with a handler or callback in real code)
-		// Here, we assume the handler for "find_node_response" updates contacts
-		// and we simulate a response by returning known contacts
-		closestTriples := n.FindKClosest(targetKey, K)
-		closest := make([]Address, 0, len(closestTriples))
-		for _, t := range closestTriples {
-			closest = append(closest, t.Addr)
+	
+	// Store the original handler
+	n.mu.RLock()
+	originalHandler := n.handlers["find_node_response"]
+	n.mu.RUnlock()
+	
+	// Create temporary handler that captures responses for this lookup
+	tempHandler := func(msg Message) error {
+		// First, let the original handler process the message (add to routing table)
+		if originalHandler != nil {
+			originalHandler(msg)
 		}
-		results <- lookupResult{from: addr, addrs: closest}
-	}
-
-	// Start up to Alpha parallel queries
-	launchQueries := func(addrs []Address) {
-		count := 0
-		for _, addr := range addrs {
-			if !queried[addr.String()] && addr != n.addr {
-				queried[addr.String()] = true
-				wg.Add(1)
-				go query(addr)
-				count++
-				if count >= Alpha {
-					break
-				}
+		
+		// Then process for our specific lookup
+		payload := string(msg.Payload)
+		if payload != "" {
+			triples, err := tripleDeserialize(payload)
+			if err == nil {
+				// Send to our response channel
+				responseChannel <- triples
 			}
 		}
+		return nil
 	}
-
-	launchQueries(shortlist)
-
+	
+	// Install temporary handler
+	n.Handle("find_node_response", tempHandler)
+	
+	// Restore original handler when done
+	defer func() {
+		n.Handle("find_node_response", originalHandler)
+		close(responseChannel)
+	}()
+	
+	// Get initial shortlist
+	initialContacts := n.routing.getKClosest(key)
+	if len(initialContacts) == 0 {
+		return []Triple{}
+	}
+	
+	// Create shortlist with up to Alpha contacts
+	shortlist := make([]Triple, 0, Alpha)
+	for i := 0; i < len(initialContacts) && i < Alpha; i++ {
+		if initialContacts[i].Addr != n.addr {
+			shortlist = append(shortlist, initialContacts[i])
+		}
+	}
+	
+	searched := make(map[string]bool) // Track which nodes we've contacted
+	
+	// Send initial requests
+	mu.Lock()
+	for _, contact := range shortlist {
+		if !searched[contact.Addr.String()] {
+			searched[contact.Addr.String()] = true
+			pendingRequests++
+			go func(c Triple) {
+				err := n.Send(c.Addr, "find_node", []byte(key))
+				if err != nil {
+					log.Printf("Failed to send find_node to %s: %v", c.Addr.String(), err)
+					// Still decrement pending requests even on error
+					mu.Lock()
+					pendingRequests--
+					mu.Unlock()
+				}
+			}(contact)
+		}
+	}
+	mu.Unlock()
+	
+	// Collect responses with timeout
+	timeout := time.After(2 * time.Second)
+	allResults := make([]Triple, 0)
+	
 	for {
-		wg.Wait()
-		close(results)
-
-		// Collect results and update shortlist
-		newShortlist := []Address{}
-		for res := range results {
-			for _, addr := range res.addrs {
-				mu.Lock()
-				if !resultMap[addr.String()] && addr != n.addr {
-					result = append(result, addr)
-					resultMap[addr.String()] = true
-					newShortlist = append(newShortlist, addr)
-					if len(result) >= K {
-						mu.Unlock()
-						return result[:K]
-					}
-				}
-				mu.Unlock()
+		select {
+		case result := <-responseChannel:
+			mu.Lock()
+			pendingRequests--
+			allResults = append(allResults, result...)
+			remaining := pendingRequests
+			mu.Unlock()
+			
+			// If no more pending requests, we're done
+			if remaining <= 0 {
+				return n.routing.getKClosest(key) // Return updated closest contacts
 			}
+			
+		case <-timeout:
+			return n.routing.getKClosest(key) // Return what we have so far
 		}
-
-		if len(newShortlist) == 0 {
-			break
-		}
-
-		// Reset for next round
-		results = make(chan lookupResult, 100)
-		wg = sync.WaitGroup{}
-		launchQueries(newShortlist)
 	}
-
-	if len(result) > K {
-		return result[:K]
-	}
-	return result
 }
-*/
-
 
 /*
 // FindNode, used for finding bootstrap?

@@ -209,105 +209,38 @@ func tripleSerialize(triples []Triple) string {
 }
 
 func (n *Node) nodeLookup(key string) []Triple {
-	// Generate unique lookup ID for this specific lookup
-	lookupID := fmt.Sprintf("lookup_%d", time.Now().UnixNano())
-	
-	// Channel to receive responses for this specific lookup
-	responseChannel := make(chan []Triple, Alpha*K)
-	pendingRequests := 0
-	var mu sync.Mutex
-	
-	// Store the original handler
-	n.mu.RLock()
-	originalHandler := n.handlers["find_node_response"]
-	n.mu.RUnlock()
-	
-	// Create temporary handler that captures responses for this lookup
-	tempHandler := func(msg Message) error {
-		// First, let the original handler process the message (add to routing table)
-		if originalHandler != nil {
-			originalHandler(msg)
-		}
-		
-		// Then process for our specific lookup
-		payload := string(msg.Payload)
-		if payload != "" {
-			triples, err := tripleDeserialize(payload)
-			if err == nil {
-				// Send to our response channel
-				responseChannel <- triples
-			}
-		}
-		return nil
-	}
-	
-	// Install temporary handler
-	n.Handle("find_node_response", tempHandler)
-	
-	// Restore original handler when done
-	defer func() {
-		n.Handle("find_node_response", originalHandler)
-		close(responseChannel)
-	}()
-	
-	// Get initial shortlist
-	initialContacts := n.routing.getKClosest(key)
-	if len(initialContacts) == 0 {
-		return []Triple{}
-	}
-	
-	// Create shortlist with up to Alpha contacts
-	shortlist := make([]Triple, 0, Alpha)
-	for i := 0; i < len(initialContacts) && i < Alpha; i++ {
-		if initialContacts[i].Addr != n.addr {
-			shortlist = append(shortlist, initialContacts[i])
-		}
-	}
-	
-	searched := make(map[string]bool) // Track which nodes we've contacted
-	
-	// Send initial requests
-	mu.Lock()
+	search := n.routing.getKClosest(key)
+	closestNode := search[0]
+	shortlist := search[:Alpha]
+	var searched []Triple
+	var wg sync.WaitGroup
+	responses := make(chan []Triple, len(shortlist))
+
 	for _, contact := range shortlist {
-		if !searched[contact.Addr.String()] {
-			searched[contact.Addr.String()] = true
-			pendingRequests++
-			go func(c Triple) {
-				err := n.Send(c.Addr, "find_node", []byte(key))
-				if err != nil {
-					log.Printf("Failed to send find_node to %s: %v", c.Addr.String(), err)
-					// Still decrement pending requests even on error
-					mu.Lock()
-					pendingRequests--
-					mu.Unlock()
-				}
-			}(contact)
+		if contact.Addr == n.addr {
+			continue
 		}
-	}
-	mu.Unlock()
-	
-	// Collect responses with timeout
-	timeout := time.After(2 * time.Second)
-	allResults := make([]Triple, 0)
-	
-	for {
-		select {
-		case result := <-responseChannel:
-			mu.Lock()
-			pendingRequests--
-			allResults = append(allResults, result...)
-			remaining := pendingRequests
-			mu.Unlock()
-			
-			// If no more pending requests, we're done
-			if remaining <= 0 {
-				return n.routing.getKClosest(key) // Return updated closest contacts
+		for _, s := range searched {
+			if s.Addr == contact.Addr {
+				continue
 			}
-			
-		case <-timeout:
-			return n.routing.getKClosest(key) // Return what we have so far
 		}
+		searched = append(searched, contact)
+		wg.Add(1)
+		go func(c Triple) {
+			defer wg.Done()
+			// Send find_node RPC and save it in result
+			var result []Triple = 
+			shortlist = append(shortlist, result...)
+
+			resp := n.routing.getKClosest(key)
+			responses <- resp
+		}(contact)
 	}
+
+	wg.Wait()
+	close(responses)
+	return shortlist
 }
 
 /*

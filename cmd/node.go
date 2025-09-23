@@ -208,12 +208,14 @@ func tripleSerialize(triples []Triple) string {
 }
 
 func (n *Node) nodeLookup(key string) []Triple {
+
 	search := n.routing.getKClosest(key)
-	//closestNode := search[0] will be added when working correctly
+	//closestNode := search[0]
 	shortlist := search[:Alpha]
 	var searched []Triple
 	var wg sync.WaitGroup
 	responses := make(chan []Triple, len(shortlist))
+	expectedResponses := 0
 
 	for _, contact := range shortlist {
 		if contact.Addr == n.addr {
@@ -224,21 +226,40 @@ func (n *Node) nodeLookup(key string) []Triple {
 				continue
 			}
 		}
+		expectedResponses++
 		searched = append(searched, contact)
 		wg.Add(1)
 		go func(c Triple) {
 			defer wg.Done()
+			originalHandler := n.handlers["find_node_response"]
+			n.Handle("find_node_response", func(msg Message) error {
+				if originalHandler != nil {
+					originalHandler(msg) // Optionally call the original
+				}
+				triples, err := tripleDeserialize(string(msg.Payload))
+				if err == nil {
+					responses <- triples // <-- send into the channel here
+				}
+				return nil
+			})
 			// Send find_node RPC and save it in result
-			//wrong result for compilation purposes
-			var result []Triple = n.routing.getKClosest(key)
-			shortlist = append(shortlist, result...)
-
-			resp := n.routing.getKClosest(key)
-			responses <- resp
+			err := n.Send(c.Addr, "find_node", []byte(key))
+			if err != nil {
+				log.Printf("Failed to send find_node to %s: %v", c.Addr.String(), err)
+				responses <- nil
+				return
+			}
+			defer n.Handle("find_node_response", originalHandler)
 		}(contact)
 	}
 
 	wg.Wait()
+	var allTriples []Triple
+	for i := 0; i < expectedResponses; i++ {
+		triples := <-responses
+		allTriples = append(allTriples, triples...)
+	}
+	//closestNode = allTriples[0]
 	close(responses)
 	return shortlist
 }

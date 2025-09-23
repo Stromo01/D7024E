@@ -8,7 +8,6 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"time"
 )
 
 // XOR distance between two keys (as hex strings)
@@ -210,7 +209,7 @@ func tripleSerialize(triples []Triple) string {
 
 func (n *Node) nodeLookup(key string) []Triple {
 	search := n.routing.getKClosest(key)
-	closestNode := search[0]
+	//closestNode := search[0] will be added when working correctly
 	shortlist := search[:Alpha]
 	var searched []Triple
 	var wg sync.WaitGroup
@@ -230,7 +229,8 @@ func (n *Node) nodeLookup(key string) []Triple {
 		go func(c Triple) {
 			defer wg.Done()
 			// Send find_node RPC and save it in result
-			var result []Triple = 
+			//wrong result for compilation purposes
+			var result []Triple = n.routing.getKClosest(key)
 			shortlist = append(shortlist, result...)
 
 			resp := n.routing.getKClosest(key)

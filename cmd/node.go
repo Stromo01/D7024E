@@ -234,6 +234,7 @@ func (n *Node) nodeLookup(key string) []Triple {
 			originalHandler := n.handlers["find_node_response"]
 			n.Handle("find_node_response", func(msg Message) error {
 				triples, err := tripleDeserialize(string(msg.Payload))
+				shortlist = append(shortlist, triples...)
 				if err == nil {
 					responses <- triples // <-- send into the channel here
 				}

@@ -1,3 +1,6 @@
+
+go test -cover ./...
+
 # Go Project Template
 
 This repository provides example code for setting up an empty Go project following best practices.

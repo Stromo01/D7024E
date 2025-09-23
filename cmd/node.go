@@ -233,12 +233,9 @@ func (n *Node) nodeLookup(key string) []Triple {
 			defer wg.Done()
 			originalHandler := n.handlers["find_node_response"]
 			n.Handle("find_node_response", func(msg Message) error {
-				if originalHandler != nil {
-					originalHandler(msg) // Optionally call the original
-				}
 				triples, err := tripleDeserialize(string(msg.Payload))
 				if err == nil {
-					responses <- triples // <-- send into the channel here
+					responses <- triples
 				}
 				return nil
 			})

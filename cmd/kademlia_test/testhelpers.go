@@ -1,4 +1,4 @@
-package kademlia_test
+package kademlia
 
 import "github.com/Stromo01/D7024E/cmd/kademlia"
 

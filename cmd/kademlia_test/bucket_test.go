@@ -6,6 +6,11 @@ import (
 	"github.com/Stromo01/D7024E/cmd/kademlia"
 )
 
+type dummyNetwork struct{}
+
+func (d *dummyNetwork) Listen(addr kademlia.Address) (kademlia.Connection, error) { return nil, nil }
+func (d *dummyNetwork) Dial(addr kademlia.Address) (kademlia.Connection, error)   { return nil, nil }
+
 func TestBucketAddContactAndLen(t *testing.T) {
 	b := kademlia.NewBucket()
 	id := kademlia.NewRandomKademliaID()

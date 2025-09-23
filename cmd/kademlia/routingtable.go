@@ -6,13 +6,13 @@ const IDLength = 20
 // RoutingTable definition (adapted from reference repo)
 type RoutingTable struct {
 	me      Contact
-	buckets [IDLength * 8]*bucket
+	buckets [IDLength * 8]*Bucket
 }
 
 func NewRoutingTable(me Contact) *RoutingTable {
 	rt := &RoutingTable{}
 	for i := 0; i < IDLength*8; i++ {
-		rt.buckets[i] = newBucket()
+		rt.buckets[i] = NewBucket()
 	}
 	rt.me = me
 	return rt

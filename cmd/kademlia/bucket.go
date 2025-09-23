@@ -1,4 +1,3 @@
-
 // bucket.go: Kademlia k-bucket implementation placeholder
 
 package kademlia
@@ -6,21 +5,21 @@ package kademlia
 import "container/list"
 
 // NewBucket returns a new k-bucket (exported for testing)
-func NewBucket() *bucket {
+func NewBucket() *Bucket {
 	return newBucket()
 }
 
-type bucket struct {
+type Bucket struct {
 	list *list.List
 }
 
-func newBucket() *bucket {
-	b := &bucket{}
+func newBucket() *Bucket {
+	b := &Bucket{}
 	b.list = list.New()
 	return b
 }
 
-func (b *bucket) AddContact(contact Contact, net Network) {
+func (b *Bucket) AddContact(contact Contact, net Network) {
 	var element *list.Element
 	for e := b.list.Front(); e != nil; e = e.Next() {
 		if contact.ID.Equals(e.Value.(Contact).ID) {
@@ -40,7 +39,7 @@ func (b *bucket) AddContact(contact Contact, net Network) {
 	}
 }
 
-func (b *bucket) GetContactAndCalcDistance(target *KademliaID) []Contact {
+func (b *Bucket) GetContactAndCalcDistance(target *KademliaID) []Contact {
 	var contacts []Contact
 	for elt := b.list.Front(); elt != nil; elt = elt.Next() {
 		contact := elt.Value.(Contact)
@@ -50,6 +49,6 @@ func (b *bucket) GetContactAndCalcDistance(target *KademliaID) []Contact {
 	return contacts
 }
 
-func (b *bucket) Len() int {
+func (b *Bucket) Len() int {
 	return b.list.Len()
 }

@@ -10,11 +10,20 @@ const (
 
 // Helper to send a PING message from one node to another
 func SendPing(network Network, from, to Address) error {
+	// Create a basic ID for the sender if needed for routing purposes
+	senderID := make([]byte, 20) // Empty ID
+
 	msg := Message{
 		From:    from,
 		To:      to,
 		Payload: []byte(MsgPing),
 		network: network,
+		// Include FromContact for routing table
+		FromContact: Triple{
+			ID:   senderID,
+			Addr: from,
+			Port: from.Port,
+		},
 	}
 	conn, err := network.Dial(to)
 	if err != nil {
@@ -64,6 +73,11 @@ func (m Message) Reply(msgType string, data []byte) error {
 		payload = append([]byte(msgType+":"), data...)
 	} else {
 		payload = data
+	}
+
+	// Make sure we have a network reference
+	if m.network == nil {
+		return fmt.Errorf("cannot reply: message has no network reference")
 	}
 
 	// Create connection to sender

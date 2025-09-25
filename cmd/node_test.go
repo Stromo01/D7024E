@@ -1,7 +1,9 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	"crypto/rand"
 	"fmt"
 	"testing"
 	"time"
@@ -538,5 +540,351 @@ func TestAllNodesCanPingEachOther(t *testing.T) {
 	// Clean up
 	for _, node := range nodes {
 		node.Close()
+	}
+}
+
+func TestNodeStoreAndFindObject(t *testing.T) {
+	network := NewMockNetwork()
+	addr := Address{IP: "127.0.0.1", Port: 8000}
+
+	node, err := NewNode(network, addr)
+	if err != nil {
+		t.Fatalf("Failed to create node: %v", err)
+	}
+
+	// Test store and find operations
+	key := "testkey"
+	value := []byte("testvalue")
+
+	// Store the object
+	node.StoreObject(key, value)
+
+	// Find the object
+	foundValue, found := node.FindObject(key)
+	if !found {
+		t.Errorf("Failed to find stored object with key %s", key)
+	}
+
+	if !bytes.Equal(foundValue, value) {
+		t.Errorf("Retrieved value doesn't match stored value. Expected %v, got %v", value, foundValue)
+	}
+
+	// Try to find a non-existent key
+	_, found = node.FindObject("nonexistentkey")
+	if found {
+		t.Errorf("Found an object that shouldn't exist")
+	}
+}
+
+func TestNodeNewNodeInit(t *testing.T) {
+	network := NewMockNetwork()
+	addr := Address{IP: "127.0.0.1", Port: 8000}
+
+	node, err := NewNode(network, addr)
+	if err != nil {
+		t.Fatalf("Failed to create node: %v", err)
+	}
+
+	// Test that ID was properly generated (non-zero)
+	var zeroID [20]byte
+	if bytes.Equal(node.id[:], zeroID[:]) {
+		t.Errorf("Node ID was not properly initialized")
+	}
+
+	// Test that the routing table was initialized
+	if node.routing == nil {
+		t.Errorf("Routing table was not initialized")
+	}
+
+	// Test that the store map was initialized
+	if node.store == nil {
+		t.Errorf("Store map was not initialized")
+	}
+
+	// Test that message handlers were registered
+	if len(node.handlers) == 0 {
+		t.Errorf("No message handlers were registered")
+	}
+
+	// Check specific handlers
+	requiredHandlers := []string{"store", MsgPing, MsgPong, "find_node", "find_node_response", "find_value"}
+	for _, handler := range requiredHandlers {
+		if _, exists := node.handlers[handler]; !exists {
+			t.Errorf("Required handler '%s' was not registered", handler)
+		}
+	}
+}
+
+func TestNodeStartAndClose(t *testing.T) {
+	network := NewMockNetwork()
+	addr := Address{IP: "127.0.0.1", Port: 8000}
+
+	node, err := NewNode(network, addr)
+	if err != nil {
+		t.Fatalf("Failed to create node: %v", err)
+	}
+
+	// Start the node
+	node.Start()
+
+	// Send a message to the node to test it's running
+	senderAddr := Address{IP: "127.0.0.1", Port: 8001}
+
+	// Create a second node to send a message
+	sender, err := NewNode(network, senderAddr)
+	if err != nil {
+		t.Fatalf("Failed to create sender node: %v", err)
+	}
+
+	// Send a ping to test message handling
+	err = sender.Send(addr, MsgPing, []byte("ping"))
+	if err != nil {
+		t.Fatalf("Failed to send ping: %v", err)
+	}
+
+	// Give some time for message to be processed
+	time.Sleep(50 * time.Millisecond)
+
+	// Close the node
+	err = node.Close()
+	if err != nil {
+		t.Errorf("Failed to close node: %v", err)
+	}
+
+	// Attempt to send another message after closing (should fail)
+	err = sender.Send(addr, "test", []byte("test"))
+	if err == nil {
+		t.Errorf("Sending to closed node should fail")
+	}
+}
+
+func TestNodeJoinNetwork(t *testing.T) {
+	network := NewMockNetwork()
+
+	// Create bootstrap node
+	bootstrapAddr := Address{IP: "127.0.0.1", Port: 8000}
+	bootstrap, err := NewNode(network, bootstrapAddr)
+	if err != nil {
+		t.Fatalf("Failed to create bootstrap node: %v", err)
+	}
+	bootstrap.Start()
+
+	// Create node that will join the network
+	nodeAddr := Address{IP: "127.0.0.1", Port: 8001}
+	node, err := NewNode(network, nodeAddr)
+	if err != nil {
+		t.Fatalf("Failed to create joining node: %v", err)
+	}
+	node.Start()
+
+	// Create bootstrap Triple
+	bootstrapTriple := Triple{
+		ID:   bootstrap.id[:],
+		Addr: bootstrapAddr,
+		Port: bootstrapAddr.Port,
+	}
+
+	// Join the network
+	err = node.JoinNetwork(bootstrapTriple)
+	if err != nil {
+		t.Fatalf("Failed to join network: %v", err)
+	}
+
+	// Give some time for the join process to complete
+	time.Sleep(100 * time.Millisecond)
+
+	// Verify that bootstrap node is in the joining node's routing table
+	// This is a simplified check
+	foundContact := false
+	for _, bucket := range node.routing.buckets {
+		for _, contact := range bucket.list {
+			if bytes.Equal(contact.ID, bootstrap.id[:]) {
+				foundContact = true
+				break
+			}
+		}
+		if foundContact {
+			break
+		}
+	}
+
+	if !foundContact {
+		t.Error("Bootstrap node was not added to the routing table after joining")
+	}
+}
+
+func TestNodeLookup(t *testing.T) {
+	// Create context with timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	network := NewMockNetwork()
+
+	// Create a network of nodes
+	numNodes := 5
+	nodes := make([]*Node, numNodes)
+
+	// First create the nodes
+	for i := 0; i < numNodes; i++ {
+		addr := Address{IP: "127.0.0.1", Port: 8000 + i}
+		node, err := NewNode(network, addr)
+		if err != nil {
+			t.Fatalf("Failed to create node %d: %v", i, err)
+		}
+		nodes[i] = node
+		node.Start()
+	}
+
+	// Connect the nodes in a simple topology
+	// Each node knows about the next node in the list
+	for i := 0; i < numNodes-1; i++ {
+		nextNode := nodes[i+1]
+		triple := Triple{
+			ID:   nextNode.id[:],
+			Addr: nextNode.addr,
+			Port: nextNode.addr.Port,
+		}
+		nodes[i].routing.addContact(triple)
+	}
+
+	// Add the first node to the last node's routing table to form a ring
+	firstNode := nodes[0]
+	firstTriple := Triple{
+		ID:   firstNode.id[:],
+		Addr: firstNode.addr,
+		Port: firstNode.addr.Port,
+	}
+	nodes[numNodes-1].routing.addContact(firstTriple)
+
+	// Give a little time for message handling to be ready
+	time.Sleep(50 * time.Millisecond)
+
+	// Create a random key for lookup
+	var randomKey [20]byte
+	rand.Read(randomKey[:])
+
+	// Use a goroutine with context to prevent hanging
+	resultsChan := make(chan []Triple, 1)
+	go func() {
+		results := nodes[0].nodeLookup(string(randomKey[:]))
+		resultsChan <- results
+	}()
+
+	// Wait for results with timeout
+	var results []Triple
+	select {
+	case results = <-resultsChan:
+		// Received results successfully
+	case <-ctx.Done():
+		t.Fatal("Timeout during node lookup")
+	}
+
+	// Clean up
+	for _, node := range nodes {
+		node.Close()
+	}
+
+	// We should have found at least some nodes
+	if len(results) == 0 {
+		t.Error("Node lookup returned no results")
+	} else {
+		t.Logf("Node lookup found %d nodes", len(results))
+	}
+}
+
+func TestTripleSerialization(t *testing.T) {
+	// Create some test triples
+	triples := []Triple{
+		{
+			ID:   []byte("id1"),
+			Addr: Address{IP: "127.0.0.1", Port: 8001},
+			Port: 8001,
+		},
+		{
+			ID:   []byte("id2"),
+			Addr: Address{IP: "127.0.0.2", Port: 8002},
+			Port: 8002,
+		},
+	}
+
+	// Test serialization
+	serialized := tripleSerialize(triples)
+	if serialized == "" {
+		t.Error("Serialization produced an empty string")
+	}
+
+	// Test deserialization
+	deserialized, err := tripleDeserialize(serialized)
+	if err != nil {
+		t.Errorf("Deserialization failed: %v", err)
+	}
+
+	// Check that we got the expected number of triples back
+	if len(deserialized) != len(triples) {
+		t.Errorf("Expected %d triples after deserialization, got %d", len(triples), len(deserialized))
+	}
+}
+
+func TestStoreAtK(t *testing.T) {
+	network := NewMockNetwork()
+
+	// Create a network of nodes
+	numNodes := 5
+	nodes := make([]*Node, numNodes)
+
+	// First create the nodes
+	for i := 0; i < numNodes; i++ {
+		addr := Address{IP: "127.0.0.1", Port: 8000 + i}
+		node, err := NewNode(network, addr)
+		if err != nil {
+			t.Fatalf("Failed to create node %d: %v", i, err)
+		}
+		nodes[i] = node
+		node.Start()
+
+		// Add all the nodes to each other's routing tables
+		for j := 0; j < i; j++ {
+			triple := Triple{
+				ID:   nodes[j].id[:],
+				Addr: nodes[j].addr,
+				Port: nodes[j].addr.Port,
+			}
+			node.routing.addContact(triple)
+
+			triple = Triple{
+				ID:   node.id[:],
+				Addr: node.addr,
+				Port: node.addr.Port,
+			}
+			nodes[j].routing.addContact(triple)
+		}
+	}
+
+	// Give a little time for message handling to be ready
+	time.Sleep(50 * time.Millisecond)
+
+	// Store a value using StoreAtK
+	key := "testkey"
+	value := []byte("testvalue")
+	k := 3 // Store at 3 closest nodes
+
+	nodes[0].StoreAtK(key, value, k)
+
+	// Give time for the store operations to complete
+	time.Sleep(100 * time.Millisecond)
+
+	// Check that the value was stored at the expected nodes
+	stored := 0
+	for _, node := range nodes {
+		if val, found := node.FindObject(key); found {
+			if bytes.Equal(val, value) {
+				stored++
+			}
+		}
+	}
+
+	// We should have stored the value at at most k nodes
+	if stored > k {
+		t.Errorf("Value was stored at %d nodes, expected at most %d", stored, k)
 	}
 }

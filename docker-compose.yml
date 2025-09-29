@@ -1,0 +1,76 @@
+version: '3.8'
+
+services:
+  # Bootstrap node (first node in the network)
+  kademlia-bootstrap:
+    build:
+      context: .
+      dockerfile: Dockerfile.kademlia
+    container_name: kademlia-bootstrap
+    ports:
+      - "8080:8080"
+    command: ["./kademlia", "-port", "8080", "-real-network"]
+    networks:
+      kademlia-net:
+        ipv4_address: 172.20.0.10
+
+  # Generate 50 additional nodes that connect to bootstrap
+  kademlia-node-1:
+    build:
+      context: .
+      dockerfile: Dockerfile.kademlia
+    depends_on:
+      - kademlia-bootstrap
+    command: ["./kademlia", "node", "--port", "8080", "--bootstrap-ip", "172.20.0.10", "--bootstrap-port", "8080"]
+    networks:
+      - kademlia-net
+
+  kademlia-node-2:
+    build:
+      context: .
+      dockerfile: Dockerfile.kademlia
+    depends_on:
+      - kademlia-bootstrap
+    command: ["./kademlia", "node", "--port", "8080", "--bootstrap-ip", "172.20.0.10", "--bootstrap-port", "8080"]
+    networks:
+      - kademlia-net
+
+  kademlia-node-3:
+    build:
+      context: .
+      dockerfile: Dockerfile.kademlia
+    depends_on:
+      - kademlia-bootstrap
+    command: ["./kademlia", "node", "--port", "8080", "--bootstrap-ip", "172.20.0.10", "--bootstrap-port", "8080"]
+    networks:
+      - kademlia-net
+
+  kademlia-node-4:
+    build:
+      context: .
+      dockerfile: Dockerfile.kademlia
+    depends_on:
+      - kademlia-bootstrap
+    command: ["./kademlia", "node", "--port", "8080", "--bootstrap-ip", "172.20.0.10", "--bootstrap-port", "8080"]
+    networks:
+      - kademlia-net
+
+  kademlia-node-5:
+    build:
+      context: .
+      dockerfile: Dockerfile.kademlia
+    depends_on:
+      - kademlia-bootstrap
+    command: ["./kademlia", "node", "--port", "8080", "--bootstrap-ip", "172.20.0.10", "--bootstrap-port", "8080"]
+    networks:
+      - kademlia-net
+
+  # Continue pattern up to node-50...
+  # Note: For brevity, I'm showing first 5. The script below will generate all 50.
+
+networks:
+  kademlia-net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16

@@ -68,7 +68,7 @@ func TestHelloworld(t *testing.T) {
 	// Alice says hello when she receives a message
 	alice.Handle("hello", func(msg Message) error {
 		fmt.Printf("Alice: Hello %s!\n", msg.From.IP)
-		return msg.ReplyString("reply", "Nice to meet you!")
+		return msg.ReplyStringWithType("reply", "Nice to meet you!")
 	})
 
 	// Bob prints replies
@@ -606,8 +606,8 @@ func TestNodeNewNodeInit(t *testing.T) {
 		t.Errorf("No message handlers were registered")
 	}
 
-	// Check specific handlers
-	requiredHandlers := []string{"store", MsgPing, MsgPong, "find_node", "find_node_response", "find_value"}
+	// Check specific handlers - updated for new RPC system
+	requiredHandlers := []string{MsgStore, MsgPing, MsgPong, MsgFindNode, MsgFindValue, MsgStoreResp, MsgFindNodeResp, MsgFindValueResp}
 	for _, handler := range requiredHandlers {
 		if _, exists := node.handlers[handler]; !exists {
 			t.Errorf("Required handler '%s' was not registered", handler)

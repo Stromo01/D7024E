@@ -25,7 +25,9 @@ func (bucket *Bucket) addContact(contact *Triple) {
 		return
 	}
 
-	// If bucket is full, remove least recently seen contact (first in list)
+	// If bucket is full, use simplified replacement policy
+	// Note: Proper Kademlia spec requires pinging the least recently seen contact
+	// and only replacing if it doesn't respond. This is a simplified version.
 	if len(bucket.list) > 0 {
 		bucket.list = append(bucket.list[1:], contact)
 	}
@@ -76,4 +78,23 @@ func (bucket *Bucket) moveToEnd(id []byte) {
 			return
 		}
 	}
+}
+
+// size returns the number of contacts in the bucket
+func (bucket *Bucket) size() int {
+	return len(bucket.list)
+}
+
+// isFull returns true if the bucket is at capacity
+func (bucket *Bucket) isFull() bool {
+	return len(bucket.list) >= BucketSize
+}
+
+// getContacts returns a copy of all contacts in the bucket
+func (bucket *Bucket) getContacts() []Triple {
+	contacts := make([]Triple, len(bucket.list))
+	for i, contact := range bucket.list {
+		contacts[i] = *contact
+	}
+	return contacts
 }

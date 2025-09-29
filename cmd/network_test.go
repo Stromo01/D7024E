@@ -2,6 +2,8 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 )
@@ -67,7 +69,7 @@ func TestMessageReplyString(t *testing.T) {
 	}()
 
 	// Send the reply
-	err = originalMsg.ReplyString("REPLY", "Hello back")
+	err = originalMsg.ReplyStringWithType("REPLY", "Hello back")
 	if err != nil {
 		t.Errorf("Failed to send reply: %v", err)
 		return
@@ -284,8 +286,31 @@ func TestSendPing(t *testing.T) {
 	// Wait for ping to be received
 	select {
 	case msg := <-received:
-		if !bytes.Equal(msg.Payload, []byte(MsgPing)) {
-			t.Errorf("Expected payload '%s', got '%s'", MsgPing, string(msg.Payload))
+		// Check if it's the new RPC format
+		payload := string(msg.Payload)
+
+		// The payload should now be in the format "PING:{json}" due to SendRPC
+		if strings.HasPrefix(payload, "PING:") {
+			// Extract the JSON part after "PING:"
+			jsonPart := payload[5:] // Remove "PING:" prefix
+			var rpc RPC
+			err := json.Unmarshal([]byte(jsonPart), &rpc)
+			if err != nil {
+				t.Errorf("Failed to parse RPC JSON: %v", err)
+			}
+			if rpc.Type != MsgPing {
+				t.Errorf("Expected RPC type '%s', got '%s'", MsgPing, rpc.Type)
+			}
+		} else {
+			// Maybe it's raw JSON from the new SendRPC format
+			var rpc RPC
+			err := json.Unmarshal([]byte(payload), &rpc)
+			if err == nil && rpc.Type == MsgPing {
+				// This is acceptable - raw JSON RPC format
+				t.Logf("Received raw JSON RPC format: %s", payload)
+			} else {
+				t.Errorf("Expected PING RPC format, got '%s'", payload)
+			}
 		}
 		if msg.From != fromAddr {
 			t.Errorf("Expected sender %v, got %v", fromAddr, msg.From)

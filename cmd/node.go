@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"crypto/rand"
 	"fmt"
 	"log"
@@ -208,15 +209,32 @@ func tripleSerialize(triples []Triple) string {
 }
 
 func (n *Node) nodeLookup(key string) []Triple {
-
 	search := n.routing.getKClosest(key)
-	//closestNode := search[0]
+	closestNode := search[0]
 	shortlist := search[:Alpha]
 	var searched []Triple
 	var wg sync.WaitGroup
 	responses := make(chan []Triple, len(shortlist))
 	expectedResponses := 0
+	var results []Triple
+	for {
+		n.searchShortlist(key, shortlist, responses, &wg, expectedResponses, searched) // Searches provided shortlist asynchronously
+		for i := 0; i < expectedResponses; i++ {
+			triples := <-responses
+			shortlist = append(shortlist, triples...)
+		}
+		shortlist = sortAndTrim(key, shortlist)
+		if bytes.Equal(closestNode.ID, shortlist[0].ID) {
+			break
+		} else {
+			closestNode = shortlist[0]
+		}
+	}
+	close(responses)
+	return results
+}
 
+func (n *Node) searchShortlist(key string, shortlist []Triple, responses chan []Triple, wg *sync.WaitGroup, expectedResponses int, searched []Triple) {
 	for _, contact := range shortlist {
 		if contact.Addr == n.addr {
 			continue
@@ -250,16 +268,22 @@ func (n *Node) nodeLookup(key string) []Triple {
 			defer n.Handle("find_node_response", originalHandler)
 		}(contact)
 	}
-
 	wg.Wait()
-	var allTriples []Triple
-	for i := 0; i < expectedResponses; i++ {
-		triples := <-responses
-		allTriples = append(allTriples, triples...)
+
+}
+
+func sortAndTrim(key string, nodes []Triple) []Triple {
+	var nodeDistance []Triple
+	for _, node := range nodes {
+		distance := xorDistance([]byte(key), node.ID)
+		for i, nd := range nodeDistance {
+			if distance.Cmp(xorDistance([]byte(key), nd.ID)) == -1 {
+				nodeDistance = append(nodeDistance[:i], append([]Triple{node}, nodeDistance[i:]...)...)
+				break
+			}
+		}
 	}
-	//closestNode = allTriples[0]
-	close(responses)
-	return shortlist
+	return nodeDistance[:K]
 }
 
 /*

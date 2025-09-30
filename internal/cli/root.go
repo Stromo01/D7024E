@@ -7,7 +7,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-const TimeLayout = "2006-01-02 15:04:05"
+const TimeLayout = "2025-09-29 15:04:05"
 
 var Verbose bool
 

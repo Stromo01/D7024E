@@ -38,5 +38,5 @@ func (rt *RoutingTable) addContact(contact Triple) {
 }
 
 func (rt *RoutingTable) insertContact(distance *big.Int, contact Triple) { //TODO: implement
-
+	
 }

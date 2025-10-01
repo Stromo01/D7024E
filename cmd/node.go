@@ -45,7 +45,7 @@ func xorDistance(a, b []byte) *big.Int {
 
 // StoreAtK stores an object at the K closest nodes (including self if applicable)
 func (n *Node) StoreAtK(key string, value []byte, k int) {
-	closest := n.routing.getKClosest(key)
+	closest := n.routing.getKClosest(key, K)
 	for _, contact := range closest {
 		if contact.Addr == n.addr {
 			n.StoreObject(key, value)
@@ -133,7 +133,7 @@ func NewNode(network Network, addr Address) (*Node, error) {
 	node.Handle("find_node", func(msg Message) error {
 		// Expect payload as "key"
 		key := string(msg.Payload)
-		closest := node.routing.getKClosest(key)
+		closest := node.routing.getKClosest(key, K)
 		var respPayload = tripleSerialize(closest)
 		return node.Send(msg.From, "find_node_response", []byte(respPayload))
 	})
@@ -161,7 +161,7 @@ func NewNode(network Network, addr Address) (*Node, error) {
 		} else {
 			// Expect payload as "key"
 			key := string(msg.Payload)
-			closest := node.routing.getKClosest(key)
+			closest := node.routing.getKClosest(key, K)
 			var respPayload = tripleSerialize(closest)
 			return node.Send(msg.From, "find_node_response", []byte(respPayload))
 		}
@@ -209,7 +209,7 @@ func tripleSerialize(triples []Triple) string {
 }
 
 func (n *Node) nodeLookup(key string) []Triple {
-	search := n.routing.getKClosest(key)
+	search := n.routing.getKClosest(key, K)
 	closestNode := search[0]
 	shortlist := search[:Alpha]
 	var searched []Triple

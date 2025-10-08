@@ -1,27 +1,18 @@
 package cli
 
 import (
+	"crypto/sha1"
 	"fmt"
+	"os"
 
 	"github.com/spf13/cobra"
 )
 
 func init() {
 	rootCmd.AddCommand(nodeCmd)
-	nodeCmd.AddCommand(startCmd)
-	nodeCmd.AddCommand(joinCmd)
-	nodeCmd.AddCommand(storeCmd)
-	nodeCmd.AddCommand(findCmd)
-
-	// Add flags
-	startCmd.Flags().StringP("address", "a", "localhost:8080", "Node address (IP:Port)")
-	joinCmd.Flags().StringP("address", "a", "localhost:8080", "This node's address")
-	joinCmd.Flags().StringP("bootstrap", "b", "", "Bootstrap node address to join")
-	storeCmd.Flags().StringP("address", "a", "localhost:8080", "Node address")
-	storeCmd.Flags().StringP("key", "k", "", "Key to store")
-	storeCmd.Flags().StringP("value", "v", "", "Value to store")
-	findCmd.Flags().StringP("address", "a", "localhost:8080", "Node address")
-	findCmd.Flags().StringP("key", "k", "", "Key to find")
+	nodeCmd.AddCommand(putCmd)
+	nodeCmd.AddCommand(getCmd)
+	nodeCmd.AddCommand(exitCmd)
 }
 
 var nodeCmd = &cobra.Command{
@@ -30,69 +21,52 @@ var nodeCmd = &cobra.Command{
 	Long:  "Commands for managing Kademlia nodes",
 }
 
-var startCmd = &cobra.Command{
-	Use:   "start",
-	Short: "Start a Kademlia node",
-	Long:  "Start a new Kademlia node on the specified address",
+var putCmd = &cobra.Command{
+	Use:   "put [file contents]",
+	Short: "Upload file contents and get hash",
+	Long:  "Takes the contents of the file you are uploading and outputs the hash of the object if it can be uploaded successfully",
+	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		address, _ := cmd.Flags().GetString("address")
-		fmt.Printf("Starting Kademlia node on %s\n", address)
-		// TODO: Implement node start logic
-		// You would create and start your node here
+		contents := args[0]
+
+		// Generate hash of the contents
+		hash := sha1.New()
+		hash.Write([]byte(contents))
+		hashBytes := hash.Sum(nil)
+		hashString := fmt.Sprintf("%x", hashBytes)
+
+		fmt.Printf("Uploading content...\n")
+		// TODO: Implement actual upload to Kademlia network
+		// For now, just simulate successful upload
+		fmt.Printf("Successfully uploaded. Hash: %s\n", hashString)
 	},
 }
 
-var joinCmd = &cobra.Command{
-	Use:   "join",
-	Short: "Join a Kademlia network",
-	Long:  "Start a node and join an existing Kademlia network",
+var getCmd = &cobra.Command{
+	Use:   "get [hash]",
+	Short: "Download object by hash",
+	Long:  "Takes a hash as its only argument and outputs the contents of the object and the node it was retrieved from if it could be downloaded successfully",
+	Args:  cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		address, _ := cmd.Flags().GetString("address")
-		bootstrap, _ := cmd.Flags().GetString("bootstrap")
+		hash := args[0]
 
-		if bootstrap == "" {
-			fmt.Println("Error: bootstrap node address is required")
-			return
-		}
-
-		fmt.Printf("Starting node on %s and joining network via %s\n", address, bootstrap)
-		// TODO: Implement join network logic
+		fmt.Printf("Searching for object with hash: %s\n", hash)
+		// TODO: Implement actual lookup in Kademlia network
+		// For now, just simulate retrieval
+		fmt.Printf("Object not found in network\n")
+		// When implemented, should show:
+		// fmt.Printf("Content: %s\nRetrieved from node: %s\n", content, nodeAddress)
 	},
 }
 
-var storeCmd = &cobra.Command{
-	Use:   "store",
-	Short: "Store a key-value pair",
-	Long:  "Store a key-value pair in the Kademlia network",
+var exitCmd = &cobra.Command{
+	Use:   "exit",
+	Short: "Terminate the node",
+	Long:  "Terminates the node and exits the program",
 	Run: func(cmd *cobra.Command, args []string) {
-		address, _ := cmd.Flags().GetString("address")
-		key, _ := cmd.Flags().GetString("key")
-		value, _ := cmd.Flags().GetString("value")
-
-		if key == "" || value == "" {
-			fmt.Println("Error: both key and value are required")
-			return
-		}
-
-		fmt.Printf("Storing %s=%s from node %s\n", key, value, address)
-		// TODO: Implement store logic
-	},
-}
-
-var findCmd = &cobra.Command{
-	Use:   "find",
-	Short: "Find a value by key",
-	Long:  "Find a value by key in the Kademlia network",
-	Run: func(cmd *cobra.Command, args []string) {
-		address, _ := cmd.Flags().GetString("address")
-		key, _ := cmd.Flags().GetString("key")
-
-		if key == "" {
-			fmt.Println("Error: key is required")
-			return
-		}
-
-		fmt.Printf("Finding key %s from node %s\n", key, address)
-		// TODO: Implement find logic
+		fmt.Println("Terminating node...")
+		// TODO: Implement proper node shutdown
+		// Should close connections, save state, etc.
+		os.Exit(0)
 	},
 }

@@ -211,7 +211,7 @@ func tripleSerialize(triples []Triple) string {
 func (n *Node) nodeLookup(key string) []Triple {
 	//TODO: If any of the alpha contacts fails to reply, it is removed from the shortlist, at least temporarily.
 	// Stop if shortlist contains k active contacts
-	search := n.routing.getKClosest(key)
+	search := n.routing.getKClosest(key, K)
 	closestNode := search[0]
 	shortlist := search[:Alpha]
 	var searched []Triple
@@ -303,9 +303,10 @@ func (n *Node) iterativeFindNode(key string) []Triple {
 	return nodes
 }
 
+/*
 func (n *Node) iterativeFindValue(key string) ([]byte, bool) {
 
-}
+}*/
 
 /*
 // FindNode, used for finding bootstrap?

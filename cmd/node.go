@@ -6,9 +6,11 @@ import (
 	"fmt"
 	"log"
 	"math/big"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 )
 
 // XOR distance between two keys (as hex strings)
@@ -44,16 +46,46 @@ func xorDistance(a, b []byte) *big.Int {
 }
 
 // StoreAtK stores an object at the K closest nodes (including self if applicable)
-func (n *Node) StoreAtK(key string, value []byte, k int) {
-	closest := n.routing.getKClosest(key, K)
+func (n *Node) StoreAtK(key string, value []byte, k int) error {
+	// Always store locally first
+	n.StoreObject(key, value)
+
+	// Find K closest nodes
+	closest := n.routing.getKClosest(key, k)
+
+	var wg sync.WaitGroup
+	errors := make(chan error, len(closest))
+
 	for _, contact := range closest {
-		if contact.Addr == n.addr {
-			n.StoreObject(key, value)
-		} else {
-			payload := []byte(key + ":" + string(value))
-			n.Send(contact.Addr, "store", payload)
+		// Skip ourselves (compare IDs, not addresses)
+		if bytes.Equal(contact.ID, n.id[:]) {
+			continue
 		}
+
+		wg.Add(1)
+		go func(c Triple) {
+			defer wg.Done()
+			payload := []byte(key + ":" + string(value))
+			if err := n.Send(c.Addr, "store", payload); err != nil {
+				errors <- fmt.Errorf("failed to store at %s: %v", c.Addr.String(), err)
+			}
+		}(contact)
 	}
+
+	wg.Wait()
+	close(errors)
+
+	// Collect any errors (optional - you might want to tolerate some failures)
+	var errs []error
+	for err := range errors {
+		errs = append(errs, err)
+	}
+
+	if len(errs) > 0 {
+		return fmt.Errorf("storage failures: %v", errs)
+	}
+
+	return nil
 }
 
 // StoreObject stores a value by key (hash)
@@ -64,11 +96,25 @@ func (n *Node) StoreObject(key string, value []byte) {
 }
 
 // FindObject retrieves a value by key (hash)
-func (n *Node) FindObject(key string) ([]byte, bool) {
+func (n *Node) FindObjectLocally(key string) ([]byte, bool) {
 	n.mu.RLock()
 	defer n.mu.RUnlock()
 	val, ok := n.store[key]
 	return val, ok
+}
+
+func (n *Node) FindObject(key string) ([]byte, string, bool) {
+	// First check locally
+	if value, found := n.FindObjectLocally(key); found {
+		return value, n.addr.String(), true
+	}
+
+	// Use iterative find value for network lookup
+	if value, found := n.iterativeFindValue(key); found {
+		return value, "network", true
+	}
+
+	return nil, "", false
 }
 
 // MessageHandler is a function that processes incoming messages
@@ -97,36 +143,55 @@ func NewNode(network Network, addr Address) (*Node, error) {
 
 	// Register STORE handler to accept and store objects
 	node.Handle("store", func(msg Message) error {
-		// Expect payload as "key:value"
-		payload := string(msg.Payload)
-		sep := -1
-		for i, c := range payload {
-			if c == ':' {
-				sep = i
-				break
+		parts := strings.SplitN(string(msg.Payload), ":", 2)
+		if len(parts) == 2 {
+			key := parts[0]
+			value := []byte(parts[1])
+
+			node.StoreObject(key, value)
+			fmt.Printf("Node %s stored object with key %s from %s\n",
+				node.Address().String(), key, msg.From.String())
+
+			// Add the sender to routing table
+			if len(msg.FromContact.ID) > 0 {
+				node.routing.addContact(msg.FromContact)
 			}
 		}
-		if sep == -1 {
-			return fmt.Errorf("invalid store payload, missing ':' separator")
-		}
-		key := payload[:sep]
-		value := []byte(payload[sep+1:])
-		node.StoreObject(key, value)
-		fmt.Printf("Node %s stored object with key %s from %s\n", node.Address().String(), key, msg.From.String())
 		return nil
 	})
 
 	// Register PING handler to add sender to contacts and reply with PONG
 	node.Handle(MsgPing, func(msg Message) error {
-		node.routing.addContact(msg.FromContact)
-		fmt.Printf("Node %s received PING from %s\n", node.Address().String(), msg.From.String())
-		return node.Send(msg.From, MsgPong, []byte("pong"))
+		fmt.Printf("Node %s received PING from %s (ID: %x)\n",
+			node.Address().String(),
+			msg.From.String(),
+			msg.FromContact.ID)
+
+		// Use the address from FromContact, not msg.From
+		contactToAdd := Triple{
+			ID:   msg.FromContact.ID,
+			Addr: msg.FromContact.Addr, // Use this instead of msg.From
+			Port: msg.FromContact.Port,
+		}
+
+		node.routing.addContact(contactToAdd)
+		return node.Send(msg.FromContact.Addr, MsgPong, []byte("pong"))
 	})
 
-	// Register PONG handler (for logging and adding contact)
+	// Update your PONG handler similarly
 	node.Handle(MsgPong, func(msg Message) error {
-		node.routing.addContact(msg.FromContact)
-		fmt.Printf("Node %s received PONG from %s\n", node.Address().String(), msg.From.String())
+		fmt.Printf("Node %s received PONG from %s (ID: %x)\n",
+			node.Address().String(),
+			msg.From.String(),
+			msg.FromContact.ID)
+
+		contactToAdd := Triple{
+			ID:   msg.FromContact.ID,
+			Addr: msg.FromContact.Addr,
+			Port: msg.FromContact.Port,
+		}
+
+		node.routing.addContact(contactToAdd)
 		return nil
 	})
 
@@ -154,19 +219,47 @@ func NewNode(network Network, addr Address) (*Node, error) {
 	})
 
 	node.Handle("find_value", func(msg Message) error {
-		// Expect payload as "key"
 		key := string(msg.Payload)
-		if val, ok := node.FindObject(key); ok { //TODO: Switch to routing table
-			return node.Send(msg.From, "find_value_response", val)
+
+		// Add the sender to routing table
+		if len(msg.FromContact.ID) > 0 {
+			node.routing.addContact(msg.FromContact)
+		}
+
+		// Check if we have the value
+		if val, ok := node.FindObjectLocally(key); ok {
+			return node.Send(msg.From, "find_value_response", []byte("VALUE:"+string(val)))
 		} else {
-			// Expect payload as "key"
-			key := string(msg.Payload)
+			// Return closest nodes
 			closest := node.routing.getKClosest(key, K)
-			var respPayload = tripleSerialize(closest)
-			return node.Send(msg.From, "find_node_response", []byte(respPayload))
+			respPayload := tripleSerialize(closest)
+			return node.Send(msg.From, "find_value_response", []byte(respPayload))
 		}
 	})
 	return node, nil
+}
+
+func (n *Node) sortByDistance(key string, nodes []Triple) []Triple {
+	keyBytes := []byte(key)
+
+	sort.Slice(nodes, func(i, j int) bool {
+		distI := xorDistance(keyBytes, nodes[i].ID)
+		distJ := xorDistance(keyBytes, nodes[j].ID)
+		return distI.Cmp(distJ) < 0
+	})
+
+	return nodes
+}
+
+func (n *Node) GetAllContacts() []Triple {
+	var contacts []Triple
+	for _, bucket := range n.routing.buckets {
+		if bucket != nil {
+			// Use GetAllContacts() method from bucket
+			contacts = append(contacts, bucket.GetAllContacts()...)
+		}
+	}
+	return contacts
 }
 
 func tripleDeserialize(s string) ([]Triple, error) {
@@ -174,14 +267,23 @@ func tripleDeserialize(s string) ([]Triple, error) {
 	addrStrs := strings.Split(s, ",")
 	for _, s := range addrStrs {
 		if s != "" {
-			// Properly parse address string "IP:Port"
+			// Properly parse address string "IP:Port:ID"
 			parts := strings.Split(s, ":")
 			if len(parts) == 3 {
 				port, err := strconv.Atoi(parts[1])
 				if err != nil {
 					continue
 				}
-				idBytes := []byte(parts[2])
+				// Parse hex ID
+				idBytes := make([]byte, len(parts[2])/2)
+				for i := 0; i < len(parts[2]); i += 2 {
+					b, err := strconv.ParseUint(parts[2][i:i+2], 16, 8)
+					if err != nil {
+						break
+					}
+					idBytes[i/2] = byte(b)
+				}
+
 				triple := Triple{
 					ID:   idBytes,
 					Addr: Address{IP: parts[0], Port: port},
@@ -194,6 +296,163 @@ func tripleDeserialize(s string) ([]Triple, error) {
 	return triples, nil
 }
 
+func (n *Node) iterativeFindValue(key string) ([]byte, bool) {
+	// Start with K closest nodes from routing table
+	shortlist := n.routing.getKClosest(key, K)
+	queried := make(map[string]bool)
+
+	for len(shortlist) > 0 {
+		// Take up to Alpha nodes to query in parallel
+		toQuery := make([]Triple, 0, Alpha)
+		remaining := make([]Triple, 0)
+
+		for _, contact := range shortlist {
+			contactKey := contact.Addr.String()
+			if !queried[contactKey] && len(toQuery) < Alpha {
+				toQuery = append(toQuery, contact)
+				queried[contactKey] = true
+			} else {
+				remaining = append(remaining, contact)
+			}
+		}
+
+		if len(toQuery) == 0 {
+			break
+		}
+
+		// Query in parallel
+		resultChan := make(chan findValueResult, len(toQuery))
+		var wg sync.WaitGroup
+
+		for _, contact := range toQuery {
+			wg.Add(1)
+			go func(c Triple) {
+				defer wg.Done()
+				result := n.queryNodeForValue(c, key)
+				resultChan <- result
+			}(contact)
+		}
+
+		wg.Wait()
+		close(resultChan)
+
+		// Process results
+		var newNodes []Triple
+		for result := range resultChan {
+			if result.found {
+				return result.value, true
+			}
+			newNodes = append(newNodes, result.nodes...)
+		}
+
+		// Update shortlist with new nodes
+		shortlist = remaining
+		for _, node := range newNodes {
+			if !queried[node.Addr.String()] {
+				shortlist = append(shortlist, node)
+			}
+		}
+
+		// Sort by distance and keep only closest
+		shortlist = n.sortByDistance(key, shortlist)
+		if len(shortlist) > K {
+			shortlist = shortlist[:K]
+		}
+	}
+
+	return nil, false
+}
+
+type findValueResult struct {
+	found bool
+	value []byte
+	nodes []Triple
+}
+
+func (n *Node) queryNodeForNodes(contact Triple, key string) []Triple {
+	// Set up temporary handler for the response
+	responseChan := make(chan []Triple, 1)
+
+	// Store original handler
+	originalHandler := n.handlers["find_node_response"]
+
+	// Set temporary handler
+	n.Handle("find_node_response", func(msg Message) error {
+		payload := string(msg.Payload)
+		nodes, err := tripleDeserialize(payload)
+		if err != nil {
+			responseChan <- []Triple{}
+		} else {
+			responseChan <- nodes
+		}
+		return nil
+	})
+
+	// Send the query
+	err := n.Send(contact.Addr, "find_node", []byte(key))
+	if err != nil {
+		// Restore original handler
+		n.Handle("find_node_response", originalHandler)
+		return []Triple{}
+	}
+
+	// Wait for response with timeout
+	select {
+	case result := <-responseChan:
+		// Restore original handler
+		n.Handle("find_node_response", originalHandler)
+		return result
+	case <-time.After(5 * time.Second):
+		// Timeout
+		n.Handle("find_node_response", originalHandler)
+		return []Triple{}
+	}
+}
+
+func (n *Node) queryNodeForValue(contact Triple, key string) findValueResult {
+	// Set up temporary handler for the response
+	responseChan := make(chan findValueResult, 1)
+
+	// Store original handler
+	originalHandler := n.handlers["find_value_response"]
+
+	// Set temporary handler
+	n.Handle("find_value_response", func(msg Message) error {
+		payload := string(msg.Payload)
+
+		// Check if this is the value we're looking for
+		if strings.HasPrefix(payload, "VALUE:") {
+			value := []byte(strings.TrimPrefix(payload, "VALUE:"))
+			responseChan <- findValueResult{found: true, value: value}
+		} else {
+			// It's a list of nodes
+			nodes, _ := tripleDeserialize(payload)
+			responseChan <- findValueResult{found: false, nodes: nodes}
+		}
+		return nil
+	})
+
+	// Send the query
+	err := n.Send(contact.Addr, "find_value", []byte(key))
+	if err != nil {
+		// Restore original handler
+		n.Handle("find_value_response", originalHandler)
+		return findValueResult{found: false}
+	}
+
+	// Wait for response with timeout
+	select {
+	case result := <-responseChan:
+		// Restore original handler
+		n.Handle("find_value_response", originalHandler)
+		return result
+	case <-time.After(5 * time.Second):
+		// Timeout
+		n.Handle("find_value_response", originalHandler)
+		return findValueResult{found: false}
+	}
+}
+
 func tripleSerialize(triples []Triple) string {
 	var respPayload string
 	for i, contact := range triples {
@@ -202,38 +461,67 @@ func tripleSerialize(triples []Triple) string {
 		}
 		respPayload += contact.Addr.String()
 		respPayload += fmt.Sprintf(":%d", contact.Port)
-		respPayload += fmt.Sprintf(":%d", contact.ID)
+		respPayload += fmt.Sprintf(":%x", contact.ID) // Changed from %d to %x
 		//respPayload format = "addr1:port1:id1,addr2:port2:id2,..."
 	}
 	return respPayload
 }
 
 func (n *Node) nodeLookup(key string) []Triple {
-	//TODO: If any of the alpha contacts fails to reply, it is removed from the shortlist, at least temporarily.
-	// Stop if shortlist contains k active contacts
-	search := n.routing.getKClosest(key, K)
-	closestNode := search[0]
-	shortlist := search[:Alpha]
-	var searched []Triple
-	var wg sync.WaitGroup
-	responses := make(chan []Triple, len(shortlist))
-	expectedResponses := 0
-	var results []Triple
+	shortlist := n.routing.getKClosest(key, K)
+	queried := make(map[string]bool)
+
 	for {
-		n.searchShortlist(key, shortlist, responses, &wg, expectedResponses, searched) // Searches provided shortlist asynchronously
-		for i := 0; i < expectedResponses; i++ {
-			triples := <-responses
-			shortlist = append(shortlist, triples...)
+		// Select up to Alpha unqueried nodes
+		toQuery := make([]Triple, 0, Alpha)
+		for _, contact := range shortlist {
+			if !queried[contact.Addr.String()] && len(toQuery) < Alpha {
+				toQuery = append(toQuery, contact)
+				queried[contact.Addr.String()] = true
+			}
 		}
-		shortlist = sortAndTrim(key, shortlist)
-		if bytes.Equal(closestNode.ID, shortlist[0].ID) {
+
+		if len(toQuery) == 0 {
 			break
-		} else {
-			closestNode = shortlist[0]
+		}
+
+		// Query in parallel
+		var wg sync.WaitGroup
+		nodesChan := make(chan []Triple, len(toQuery))
+
+		for _, contact := range toQuery {
+			wg.Add(1)
+			go func(c Triple) {
+				defer wg.Done()
+				nodes := n.queryNodeForNodes(c, key)
+				nodesChan <- nodes
+			}(contact)
+		}
+
+		wg.Wait()
+		close(nodesChan)
+
+		// Collect new nodes
+		var newNodes []Triple
+		for nodes := range nodesChan {
+			newNodes = append(newNodes, nodes...)
+		}
+
+		// Add new nodes to shortlist
+		for _, node := range newNodes {
+			if !queried[node.Addr.String()] {
+				shortlist = append(shortlist, node)
+			}
+		}
+
+		// Sort and trim
+		shortlist = n.sortByDistance(key, shortlist)
+		if len(shortlist) > K {
+			shortlist = shortlist[:K]
 		}
 	}
-	close(responses)
-	return results
+
+	return shortlist
 }
 
 func (n *Node) searchShortlist(key string, shortlist []Triple, responses chan []Triple, wg *sync.WaitGroup, expectedResponses int, searched []Triple) {
@@ -303,48 +591,40 @@ func (n *Node) iterativeFindNode(key string) []Triple {
 	return nodes
 }
 
-/* TODO: Implement nodelookup with find_value RPC*/
-func (n *Node) iterativeFindValue(key string) ([]byte, bool) {
-	return nil, false
-}
-
-/*
-// FindNode, used for finding bootstrap?
-func (n *Node) FindNode(addr Address) *Triple {
-	n.mu.RLock()
-	defer n.mu.RUnlock()
-	for _, c := range n.routing {
-		if c.Addr == addr {
-			return &c
-		}
-	}
-	return nil
-}*/
-
 // JoinNetwork: send PING to known node and add to contacts
-func (n *Node) JoinNetwork(boostrapNode Triple) error {
-	err := SendPing(n.network, n.addr, boostrapNode.Addr)
+func (n *Node) JoinNetwork(bootstrapNode Triple) error {
+	fmt.Printf("Attempting to join network via %s\n", bootstrapNode.Addr.String())
+
+	// Send PING to bootstrap node
+	err := n.Send(bootstrapNode.Addr, MsgPing, []byte("ping"))
 	if err != nil {
-		return fmt.Errorf("failed to join network via %s: %v", boostrapNode.Addr.String(), err)
-	}
-	err = n.Send(boostrapNode.Addr, "find_node", []byte(fmt.Sprintf("%x", n.id)))
-	if err != nil {
-		return fmt.Errorf("failed to send find_node to %s: %v", boostrapNode.Addr.String(), err)
+		return fmt.Errorf("failed to ping bootstrap node %s: %v", bootstrapNode.Addr.String(), err)
 	}
 
-	// Contact will be added when PONG is received
+	// Wait a moment for the PONG response
+	time.Sleep(100 * time.Millisecond)
+
+	// Send find_node for our own ID to populate routing table
+	err = n.Send(bootstrapNode.Addr, "find_node", []byte(fmt.Sprintf("%x", n.id)))
+	if err != nil {
+		return fmt.Errorf("failed to send find_node to %s: %v", bootstrapNode.Addr.String(), err)
+	}
+
+	// Wait for responses
+	time.Sleep(100 * time.Millisecond)
+
+	// Send find_node for a random ID to discover more nodes
+	randomID := make([]byte, 20)
+	for i := range randomID {
+		randomID[i] = byte(i * 13) // Simple pattern
+	}
+	err = n.Send(bootstrapNode.Addr, "find_node", []byte(fmt.Sprintf("%x", randomID)))
+	if err != nil {
+		return fmt.Errorf("failed to send second find_node to %s: %v", bootstrapNode.Addr.String(), err)
+	}
+
 	return nil
 }
-
-/*
-func (n *Node) pingAllKnown(nodes []Triple) {
-	for _, node := range nodes {
-		err := SendPing(n.network, n.addr, node.Addr)
-		if err != nil {
-			log.Printf("Failed to ping known node %s: %v", node.Addr.String(), err)
-		}
-	}
-}*/
 
 // Handle registers a message handler for a specific message type
 func (n *Node) Handle(msgType string, handler MessageHandler) {
@@ -406,12 +686,6 @@ func (n *Node) Start() {
 
 // Send sends a message to the target address
 func (n *Node) Send(to Address, msgType string, data []byte) error {
-	connection, err := n.network.Dial(to)
-	if err != nil {
-		return fmt.Errorf("failed to dial %s: %v", to.String(), err)
-	}
-	defer connection.Close()
-
 	// Format payload as "msgType:data"
 	var payload []byte
 	if msgType != "" {
@@ -420,13 +694,17 @@ func (n *Node) Send(to Address, msgType string, data []byte) error {
 		payload = data
 	}
 
+	// Create the message with proper FromContact
 	msg := Message{
-		From:    n.addr,
-		To:      to,
-		Payload: payload,
+		From:        n.addr,
+		FromContact: Triple{ID: n.id[:], Addr: n.addr, Port: n.addr.Port},
+		To:          to,
+		Payload:     payload,
+		network:     n.network,
 	}
 
-	return connection.Send(msg)
+	// Use the listening connection for sending (maintains source port)
+	return n.connection.Send(msg)
 }
 
 // SendString is a convenience method for sending string messages

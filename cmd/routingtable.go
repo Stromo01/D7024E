@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"fmt"
 	"math/big"
 	"sort"
 )
@@ -53,6 +54,7 @@ func (rt *RoutingTable) getKClosest(key string, K int) []Triple {
 }
 
 func (rt *RoutingTable) addContact(contact Triple) {
+	fmt.Printf("Adding contact %s (ID: %x) to routing table\n", contact.Addr.String(), contact.ID)
 	if bytes.Equal(contact.ID, rt.me.ID) {
 		return // Don't add ourselves
 	}

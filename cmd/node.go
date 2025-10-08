@@ -209,7 +209,9 @@ func tripleSerialize(triples []Triple) string {
 }
 
 func (n *Node) nodeLookup(key string) []Triple {
-	search := n.routing.getKClosest(key, K)
+	//TODO: If any of the alpha contacts fails to reply, it is removed from the shortlist, at least temporarily.
+	// Stop if shortlist contains k active contacts
+	search := n.routing.getKClosest(key)
 	closestNode := search[0]
 	shortlist := search[:Alpha]
 	var searched []Triple
@@ -283,7 +285,26 @@ func sortAndTrim(key string, nodes []Triple) []Triple {
 			}
 		}
 	}
-	return nodeDistance[:K]
+	return nodeDistance[:Alpha]
+}
+
+func (n *Node) iterativeStore(key string, value []byte) {
+	var nodes []Triple = n.iterativeFindNode(key)
+	for _, node := range nodes {
+		n.Send(node.Addr, "store", value)
+	}
+}
+
+func (n *Node) iterativeFindNode(key string) []Triple {
+	var nodes []Triple = n.nodeLookup(key)
+	for _, node := range nodes {
+		n.Send(node.Addr, "find_node", []byte(key))
+	}
+	return nodes
+}
+
+func (n *Node) iterativeFindValue(key string) ([]byte, bool) {
+
 }
 
 /*

@@ -8,7 +8,7 @@ type Bucket struct {
 	list []*Triple
 }
 
-// newBucket creates a new bucket with an initial capacity defined by BucketSize.
+// NewBucket creates a new bucket with an initial capacity defined by BucketSize.
 func newBucket() *Bucket {
 	bucket := &Bucket{}
 	bucket.list = make([]*Triple, 0, BucketSize)
@@ -82,7 +82,7 @@ func (b *Bucket) GetContactAndCalcDistance(targetID []byte) []Triple {
 	for _, triple := range b.list {
 		// Create a copy and calculate distance
 		contact := *triple
-		// You might want to add a Distance field to Triple or calculate it separately
+		//contact.Distance = xorDistance(contact.ID, targetID)
 		contacts = append(contacts, contact)
 	}
 

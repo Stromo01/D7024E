@@ -303,10 +303,10 @@ func (n *Node) iterativeFindNode(key string) []Triple {
 	return nodes
 }
 
-/* TODO: Implement nodelookup with find_value RPC
+/* TODO: Implement nodelookup with find_value RPC*/
 func (n *Node) iterativeFindValue(key string) ([]byte, bool) {
-
-}*/
+	return nil, false
+}
 
 /*
 // FindNode, used for finding bootstrap?

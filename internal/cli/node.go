@@ -5,8 +5,17 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/eislab-cps/go-template/pkg/kademlia"
 	"github.com/spf13/cobra"
 )
+
+// Global node instance
+var currentNode *kademlia.Node
+
+// SetNode sets the current node instance
+func SetNode(node *kademlia.Node) {
+	currentNode = node
+}
 
 func init() {
 	rootCmd.AddCommand(nodeCmd)
@@ -35,9 +44,16 @@ var putCmd = &cobra.Command{
 		hashBytes := hash.Sum(nil)
 		hashString := fmt.Sprintf("%x", hashBytes)
 
+		if currentNode == nil {
+			fmt.Printf("Error: No node running. Start a node first.\n")
+			return
+		}
+
 		fmt.Printf("Uploading content...\n")
-		// TODO: Implement actual upload to Kademlia network
-		// For now, just simulate successful upload
+
+		// Store the object in the current node
+		currentNode.StoreObject(hashString, []byte(contents))
+
 		fmt.Printf("Successfully uploaded. Hash: %s\n", hashString)
 	},
 }
@@ -51,11 +67,25 @@ var getCmd = &cobra.Command{
 		hash := args[0]
 
 		fmt.Printf("Searching for object with hash: %s\n", hash)
-		// TODO: Implement actual lookup in Kademlia network
-		// For now, just simulate retrieval
-		fmt.Printf("Object not found in network\n")
-		// When implemented, should show:
-		// fmt.Printf("Content: %s\nRetrieved from node: %s\n", content, nodeAddress)
+
+		if currentNode == nil {
+			fmt.Printf("Error: No node running. Start a node first.\n")
+			return
+		}
+
+		// First check if we have the object locally
+		if value, found := currentNode.FindObject(hash); found {
+			fmt.Printf("Content: %s\nRetrieved from local node: %s\n", string(value), currentNode.Address().String())
+			return
+		}
+
+		// If not found locally, search the network
+		nodes := currentNode.IterativeFindNode(hash)
+		if len(nodes) == 0 {
+			fmt.Printf("Object not found in network\n")
+		} else {
+			fmt.Printf("Found %d potential nodes, but value retrieval not yet implemented\n", len(nodes))
+		}
 	},
 }
 

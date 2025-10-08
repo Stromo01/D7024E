@@ -75,6 +75,7 @@ func (b *Bucket) GetFirst() *Triple {
 	return b.list[len(b.list)-1] // Last element is least recently seen
 }
 
+/*
 // GetContactAndCalcDistance returns an array of Triples with calculated distances
 func (b *Bucket) GetContactAndCalcDistance(targetID []byte) []Triple {
 	var contacts []Triple
@@ -88,6 +89,7 @@ func (b *Bucket) GetContactAndCalcDistance(targetID []byte) []Triple {
 
 	return contacts
 }
+*/
 
 // GetAllContacts returns all Triples in the bucket
 func (b *Bucket) GetAllContacts() []Triple {

@@ -1,11 +1,12 @@
 package main
 
 import (
+	"bytes"
 	"math/big"
 	"sort"
 )
 
-const BucketSize = 20
+const BucketSize = 8
 const IDLength = 20
 
 type RoutingTable struct {
@@ -52,12 +53,13 @@ func (rt *RoutingTable) getKClosest(key string, K int) []Triple {
 }
 
 func (rt *RoutingTable) addContact(contact Triple) {
+	if bytes.Equal(contact.ID, rt.me.ID) {
+		return // Don't add ourselves
+	}
+
 	bucketIndex := rt.getBucketIndex(contact.ID)
 	bucket := rt.buckets[bucketIndex]
 	bucket.AddContact(contact)
-	// bucket := rt.buckets[bucketI] // Uncomment and use as needed
-	// rt.insertContact(distance, contact) // Update as needed
-
 }
 
 func (rt *RoutingTable) RemoveContact(contact Triple) {
@@ -71,9 +73,23 @@ func (rt *RoutingTable) RemoveContact(contact Triple) {
 
 func (routingTable *RoutingTable) getBucketIndex(nodeID []byte) int {
 	distance := xorDistance(routingTable.me.ID, nodeID)
-	index := distance.BitLen() - 1
+	// If distance is 0 (identical IDs), return bucket 0
+	if distance.Sign() == 0 {
+		return 0
+	}
+
+	// Calculate bucket index based on the position of the most significant bit
+	// BitLen() returns the number of bits needed to represent the number
+	// For Kademlia, we want bucket 0 for the closest nodes (smallest distances)
+	bitLen := distance.BitLen()
+	index := bitLen - 1
+
+	// Ensure index is within valid range [0, IDLength*8-1]
 	if index < 0 {
 		index = 0
+	}
+	if index >= IDLength*8 {
+		index = IDLength*8 - 1
 	}
 	return index
 }

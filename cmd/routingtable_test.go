@@ -306,10 +306,12 @@ func TestRoutingTableBucketDistribution(t *testing.T) {
 	testContacts := []struct {
 		description string
 		id          []byte
+		shouldAdd   bool // Whether we expect this contact to be added
 	}{
 		{
 			description: "identical ID",
 			id:          make([]byte, 20),
+			shouldAdd:   false, // Should not be added (it's ourselves)
 		},
 		{
 			description: "differ in last bit",
@@ -318,6 +320,7 @@ func TestRoutingTableBucketDistribution(t *testing.T) {
 				id[19] = 0x01 // ...00000001
 				return id
 			}(),
+			shouldAdd: true,
 		},
 		{
 			description: "differ in second last bit",
@@ -326,6 +329,7 @@ func TestRoutingTableBucketDistribution(t *testing.T) {
 				id[19] = 0x02 // ...00000010
 				return id
 			}(),
+			shouldAdd: true,
 		},
 		{
 			description: "differ in multiple bits",
@@ -334,6 +338,7 @@ func TestRoutingTableBucketDistribution(t *testing.T) {
 				id[19] = 0xFF // ...11111111
 				return id
 			}(),
+			shouldAdd: true,
 		},
 	}
 
@@ -345,10 +350,17 @@ func TestRoutingTableBucketDistribution(t *testing.T) {
 			// Add the contact
 			rt.addContact(contact)
 
-			// Verify it's in the correct bucket
+			// Verify it's in the correct bucket (or not added if it's identical)
 			bucket := rt.buckets[bucketIndex]
-			if !bucket.Contains(contact) {
-				t.Errorf("Contact with %s should be in bucket %d", tc.description, bucketIndex)
+
+			if tc.shouldAdd {
+				if !bucket.Contains(contact) {
+					t.Errorf("Contact with %s should be in bucket %d", tc.description, bucketIndex)
+				}
+			} else {
+				if bucket.Contains(contact) {
+					t.Errorf("Contact with %s should not be added (identical to self)", tc.description)
+				}
 			}
 		})
 	}

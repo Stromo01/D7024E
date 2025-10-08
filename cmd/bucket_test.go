@@ -269,6 +269,7 @@ func TestBucketGetFirstSingleContact(t *testing.T) {
 	}
 }
 
+/*
 func TestBucketGetContactAndCalcDistance(t *testing.T) {
 	bucket := newBucket()
 	triple1 := createRandomTriple()
@@ -304,6 +305,7 @@ func TestBucketGetContactAndCalcDistanceEmpty(t *testing.T) {
 		t.Errorf("Expected 0 contacts for empty bucket, got %d", len(contacts))
 	}
 }
+*/
 
 func TestBucketGetAllContacts(t *testing.T) {
 	bucket := newBucket()

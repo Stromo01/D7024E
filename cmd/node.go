@@ -303,7 +303,7 @@ func (n *Node) iterativeFindNode(key string) []Triple {
 	return nodes
 }
 
-/*
+/* TODO: Implement nodelookup with find_value RPC
 func (n *Node) iterativeFindValue(key string) ([]byte, bool) {
 
 }*/

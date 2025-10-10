@@ -1,10 +1,11 @@
-package main
+package main		
 
 import (
 	"bytes"
 	"crypto/rand"
 	"testing"
 )
+
 
 // Helper function to create a random Triple for testing
 func createRandomTriple() Triple {
@@ -268,44 +269,6 @@ func TestBucketGetFirstSingleContact(t *testing.T) {
 		t.Error("GetFirst() should return the only contact")
 	}
 }
-
-/*
-func TestBucketGetContactAndCalcDistance(t *testing.T) {
-	bucket := newBucket()
-	triple1 := createRandomTriple()
-	triple2 := createRandomTriple()
-
-	bucket.AddContact(triple1)
-	bucket.AddContact(triple2)
-
-	targetID := make([]byte, 20)
-	rand.Read(targetID)
-
-	contacts := bucket.GetContactAndCalcDistance(targetID)
-
-	if len(contacts) != 2 {
-		t.Errorf("Expected 2 contacts, got %d", len(contacts))
-	}
-
-	// Verify the contacts are copies, not references
-	originalPort := bucket.list[0].Port
-	contacts[0].Port = 9999
-	if bucket.list[0].Port != originalPort {
-		t.Error("GetContactAndCalcDistance should return copies, not references")
-	}
-}
-
-func TestBucketGetContactAndCalcDistanceEmpty(t *testing.T) {
-	bucket := newBucket()
-	targetID := make([]byte, 20)
-
-	contacts := bucket.GetContactAndCalcDistance(targetID)
-
-	if len(contacts) != 0 {
-		t.Errorf("Expected 0 contacts for empty bucket, got %d", len(contacts))
-	}
-}
-*/
 
 func TestBucketGetAllContacts(t *testing.T) {
 	bucket := newBucket()

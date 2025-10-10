@@ -96,6 +96,8 @@ func (routingTable *RoutingTable) getBucketIndex(nodeID []byte) int {
 	return index
 }
 
+/*
 func (rt *RoutingTable) insertContact(distance *big.Int, contact Triple) { //TODO: implement
 
 }
+*/

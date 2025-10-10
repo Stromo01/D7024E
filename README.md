@@ -1,6 +1,10 @@
 
 go test -cover ./...
 
+docker-compose up --build -d bootstrap
+
+docker-compose up -d --scale node=49 node
+
 # Go Project Template
 
 This repository provides example code for setting up an empty Go project following best practices.

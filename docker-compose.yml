@@ -1,0 +1,28 @@
+version: "3.8"
+
+services:
+  bootstrap:
+    build: .
+    container_name: kademlia-bootstrap
+    environment:
+      - ADVERTISE_HOST=bootstrap
+    command: ["--bootstrap", "--port", "8000"]
+    ports:
+      - "8000:8000"
+    networks:
+      - knet
+
+  node:
+    build: .
+    depends_on:
+      - bootstrap
+    environment:
+      - ADVERTISE_HOST=
+    # replicas will contact bootstrap by service name
+    command: ["--bootstrap-addr", "bootstrap:8000", "--port", "8000"]
+    networks:
+      - knet
+
+networks:
+  knet:
+    driver: bridge

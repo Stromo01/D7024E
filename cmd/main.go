@@ -65,7 +65,12 @@ func startKademliaNode() {
 	// Get advertise address (what other nodes use to contact us)
 	advertiseHost := os.Getenv("ADVERTISE_HOST")
 	if advertiseHost == "" {
-		advertiseHost = "127.0.0.1" // fallback for local dev
+		// In Docker, use container hostname
+		if hostname, err := os.Hostname(); err == nil {
+			advertiseHost = hostname
+		} else {
+			advertiseHost = "127.0.0.1" // fallback for local dev
+		}
 	}
 
 	// Create the address we'll advertise to other nodes

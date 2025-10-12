@@ -18,6 +18,7 @@ services:
     environment:
       - NODE_PORT=8001
       - BOOTSTRAP_ADDR=bootstrap:8000
+      - ADVERTISE_HOST=node
       - DOCKER_ENV=true
     depends_on:
       - bootstrap

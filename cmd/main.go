@@ -23,8 +23,8 @@ func main() {
 	build.BuildTime = BuildTime
 
 	// Check if we should run CLI commands or start node directly
-	if len(os.Args) > 1 && (os.Args[1] == "rpc" || os.Args[1] == "--help" || os.Args[1] == "-h") {
-		// Use CLI framework for rpc command or help
+	if len(os.Args) > 1 && (os.Args[1] == "rpc" || os.Args[1] == "put" || os.Args[1] == "get") {
+		// Use CLI framework for commands
 		cli.Execute()
 		return
 	}

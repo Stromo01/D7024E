@@ -18,12 +18,29 @@ services:
     environment:
       - NODE_PORT=8001
       - BOOTSTRAP_ADDR=bootstrap:8000
-      - ADVERTISE_HOST=node
       - DOCKER_ENV=true
     depends_on:
       - bootstrap
     networks:
       - kademlia_network
+
+  interactive:
+    build: . 
+    image: d7024e-node:latest
+    container_name: kademlia-interactive  # Fixed container name
+    environment:
+      - NODE_PORT=8002
+      - BOOTSTRAP_ADDR=bootstrap:8000
+      - ADVERTISE_HOST=kademlia-interactive
+      - DOCKER_ENV=false
+    depends_on:
+      - bootstrap
+    networks:
+      - kademlia_network
+    stdin_open: true
+    tty: true
+    profiles:
+      - interactive
 
 networks:
   kademlia_network:

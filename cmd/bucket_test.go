@@ -1,11 +1,10 @@
-package main		
+package main
 
 import (
 	"bytes"
 	"crypto/rand"
 	"testing"
 )
-
 
 // Helper function to create a random Triple for testing
 func createRandomTriple() Triple {
@@ -15,6 +14,40 @@ func createRandomTriple() Triple {
 		ID:   id[:],
 		Addr: Address{IP: "127.0.0.1", Port: 8000},
 		Port: 8000,
+	}
+}
+
+func TestBucketLRUOrdering(t *testing.T) {
+	bucket := newBucket()
+
+	// Add contacts
+	contact1 := createTripleWithID([]byte{1})
+	contact2 := createTripleWithID([]byte{2})
+	contact3 := createTripleWithID([]byte{3})
+
+	bucket.AddContact(contact1)
+	bucket.AddContact(contact2)
+	bucket.AddContact(contact3)
+
+	// contact3 should be at front (most recent)
+	first := bucket.GetFirst()
+	if !bytes.Equal(first.ID, contact3.ID) {
+		t.Errorf("Expected most recent contact to be contact3")
+	}
+
+	// contact1 should be at back (least recent)
+	last := bucket.GetLast()
+	if !bytes.Equal(last.ID, contact1.ID) {
+		t.Errorf("Expected least recent contact to be contact1")
+	}
+
+	// Move contact1 to front by adding it again
+	bucket.AddContact(contact1)
+
+	// Now contact1 should be most recent
+	first = bucket.GetFirst()
+	if !bytes.Equal(first.ID, contact1.ID) {
+		t.Errorf("Expected contact1 to move to front")
 	}
 }
 
@@ -105,20 +138,29 @@ func TestBucketAddContactToFull(t *testing.T) {
 		t.Error("Bucket should be full")
 	}
 
-	if bucket.Len() != BucketSize {
-		t.Errorf("Expected bucket length %d, got %d", BucketSize, bucket.Len())
-	}
+	// Remember the LRU contact (should be contacts[0] at the back)
+	lruContact := bucket.GetLast()
 
-	// Try to add one more contact - should not be added
+	// Try to add one more contact - should evict LRU and add new contact
 	newContact := createRandomTriple()
 	bucket.AddContact(newContact)
 
 	if bucket.Len() != BucketSize {
-		t.Errorf("Bucket length should remain %d when adding to full bucket, got %d", BucketSize, bucket.Len())
+		t.Errorf("Bucket length should remain %d after adding to full bucket, got %d", BucketSize, bucket.Len())
 	}
 
-	if bucket.Contains(newContact) {
-		t.Error("Full bucket should not accept new contacts")
+	if !bucket.Contains(newContact) {
+		t.Error("New contact should be added to full bucket (with LRU eviction)")
+	}
+
+	if bucket.Contains(*lruContact) {
+		t.Error("LRU contact should have been evicted")
+	}
+
+	// New contact should be at the front
+	first := bucket.GetFirst()
+	if !bytes.Equal(first.ID, newContact.ID) {
+		t.Error("New contact should be at front (most recent)")
 	}
 }
 
@@ -243,14 +285,14 @@ func TestBucketGetFirst(t *testing.T) {
 	bucket.AddContact(triple1)
 	bucket.AddContact(triple2)
 
-	// The least recently seen should be the first one added (at the back)
+	// triple2 should be the most recently added (at front)
 	first = bucket.GetFirst()
 	if first == nil {
 		t.Fatal("GetFirst() should not return nil for non-empty bucket")
 	}
 
-	if !bytes.Equal(first.ID, triple1.ID) {
-		t.Error("GetFirst() should return the least recently seen contact")
+	if !bytes.Equal(first.ID, triple2.ID) {
+		t.Error("GetFirst() should return the most recently seen contact")
 	}
 }
 
@@ -386,8 +428,8 @@ func TestBucketLRUBehavior(t *testing.T) {
 	}
 
 	// triple2 should now be the least recently seen
-	leastRecent := bucket.GetFirst()
+	leastRecent := bucket.GetLast() // Use GetLast, not GetFirst!
 	if !bytes.Equal(leastRecent.ID, triple2.ID) {
-		t.Error("GetFirst should return the least recently seen contact")
+		t.Error("GetLast should return the least recently seen contact")
 	}
 }

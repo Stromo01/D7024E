@@ -40,6 +40,7 @@ type Connection interface {
 }
 
 type Message struct {
+	ID          [20]byte
 	From        Address
 	FromContact Triple
 	To          Address

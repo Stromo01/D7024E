@@ -27,6 +27,8 @@ type Node struct {
 	mu         sync.RWMutex
 	closed     bool
 	closeMu    sync.RWMutex
+	pending    map[[20]byte]chan Message
+	pendingMu  sync.Mutex
 }
 
 type Triple struct {
@@ -635,53 +637,73 @@ func (n *Node) Handle(msgType string, handler MessageHandler) {
 
 // Start begins listening for incoming messages
 func (n *Node) Start() {
-	go func() {
-		for {
+	if n == nil {
+		return
+	}
+	if n.connection == nil {
+		log.Println("node.Start: no connection set, returning")
+		return
+	}
+
+	for {
+		// check closed flag
+		n.closeMu.RLock()
+		if n.closed {
+			n.closeMu.RUnlock()
+			return
+		}
+		n.closeMu.RUnlock()
+
+		// blocking receive
+		msg, err := n.connection.Recv()
+		if err != nil {
 			n.closeMu.RLock()
-			if n.closed {
-				n.closeMu.RUnlock()
-				return
+			if !n.closed {
+				log.Printf("Node %s failed to receive message: %v", n.addr.String(), err)
 			}
 			n.closeMu.RUnlock()
+			return
+		}
 
-			msg, err := n.connection.Recv()
-			if err != nil {
-				n.closeMu.RLock()
-				if !n.closed {
-					log.Printf("Node %s failed to receive message: %v", n.addr.String(), err)
-				}
-				n.closeMu.RUnlock()
-				return
+		// deliver to waiter if present (correlate by message ID)
+		n.pendingMu.Lock()
+		if ch, ok := n.pending[msg.ID]; ok {
+			// deliver without blocking if receiver not ready
+			select {
+			case ch <- msg:
+			default:
 			}
+			delete(n.pending, msg.ID)
+			n.pendingMu.Unlock()
+			continue
+		}
+		n.pendingMu.Unlock()
 
-			// Extract message type from payload (first part before ':')
-			msgType := "default"
-			payload := string(msg.Payload)
-			if len(payload) > 0 {
-				for i, char := range payload {
-					if char == ':' {
-						msgType = payload[:i]
-						// Pass only the payload after the first colon to the handler
-						msg.Payload = []byte(payload[i+1:])
-						break
-					}
-				}
-			}
-
-			n.mu.RLock()
-			handler, exists := n.handlers[msgType]
-			if !exists {
-				handler, exists = n.handlers["default"]
-			}
-			n.mu.RUnlock()
-
-			if exists && handler != nil {
-				if err := handler(msg); err != nil {
-					log.Printf("Handler error: %v", err)
-				}
+		// determine message type (assumes "TYPE:payload" convention)
+		msgType := "default"
+		if len(msg.Payload) > 0 {
+			if i := bytes.IndexByte(msg.Payload, ':'); i >= 0 {
+				msgType = string(msg.Payload[:i])
 			}
 		}
-	}()
+
+		// dispatch to handler
+		n.mu.RLock()
+		handler, exists := n.handlers[msgType]
+		if !exists {
+			handler, exists = n.handlers["default"]
+		}
+		n.mu.RUnlock()
+
+		if exists && handler != nil {
+			if err := handler(msg); err != nil {
+				log.Printf("handler error from %s: %v", msg.From.String(), err)
+			}
+		} else {
+			// no handler found, ignore or log
+			log.Printf("no handler for msg type %q from %s", msgType, msg.From.String())
+		}
+	}
 }
 
 // Send sends a message to the target address

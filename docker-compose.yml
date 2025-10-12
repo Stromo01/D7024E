@@ -1,27 +1,28 @@
-version: "3.8"
-
 services:
   bootstrap:
-    build: .
-    container_name: kademlia-bootstrap
+    build: . 
+    image: d7024e-node:latest
     environment:
+      - NODE_PORT=8000
+      - IS_BOOTSTRAP=true
       - ADVERTISE_HOST=bootstrap
-    command: ["--bootstrap", "--port", "8000", "--daemon"]
+      - DOCKER_ENV=true
     ports:
       - "8000:8000"
     networks:
-      - knet
+      - kademlia_network
 
   node:
-    build: .
+    build: . 
+    image: d7024e-node:latest
+    environment:
+      - NODE_PORT=8001
+      - BOOTSTRAP_ADDR=bootstrap:8000
+      - DOCKER_ENV=true
     depends_on:
       - bootstrap
-    environment:
-      - ADVERTISE_HOST=
-    command: ["--bootstrap-addr", "bootstrap:8000", "--port", "8000", "--daemon"]
     networks:
-      - knet
+      - kademlia_network
 
 networks:
-  knet:
-    driver: bridge
+  kademlia_network:

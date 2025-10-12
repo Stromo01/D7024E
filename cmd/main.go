@@ -41,36 +41,41 @@ func startKademliaNode() {
 
 	flag.Parse()
 
+	// Override with environment variables if they exist (for Docker)
+	if portEnv := os.Getenv("NODE_PORT"); portEnv != "" {
+		if p, err := strconv.Atoi(portEnv); err == nil {
+			*portPtr = p
+		}
+	}
+
+	if os.Getenv("IS_BOOTSTRAP") == "true" {
+		*isBootstrapPtr = true
+	}
+
+	if bootstrapEnv := os.Getenv("BOOTSTRAP_ADDR"); bootstrapEnv != "" {
+		*bootstrapAddrPtr = bootstrapEnv
+	}
+
+	// Debug logging
+	log.Printf("Port: %d, IsBootstrap: %t, BootstrapAddr: %s", *portPtr, *isBootstrapPtr, *bootstrapAddrPtr)
+
 	// Create UDP network
 	network := NewUDPNetwork()
 
-	// bind listener to all interfaces so other containers/hosts can reach us
-	listenIP := "0.0.0.0"
-	listenAddr := Address{IP: listenIP, Port: *portPtr}
-	listenerConn, err := network.Listen(listenAddr)
-	if err != nil {
-		log.Fatalf("failed to bind listener on %s: %v", listenAddr.String(), err)
-	}
-	// keep the listening connection open for the lifetime of the node
-	// it will be closed when the program exits or when you explicitly Close() it
-	defer listenerConn.Close()
-
-	// Advertised IP/host that other nodes should use to contact this node.
-	// Allow override for docker with ADVERTISE_HOST env var (e.g. "bootstrap" or container IP).
-	// If ADVERTISE_HOST is not set we advertise the container's IP (or loopback for local dev).
+	// Get advertise address (what other nodes use to contact us)
 	advertiseHost := os.Getenv("ADVERTISE_HOST")
 	if advertiseHost == "" {
-		advertiseHost = listenIP
+		advertiseHost = "127.0.0.1" // fallback for local dev
 	}
 
-	// Create local (advertised) address
-	addr := Address{
-		IP:   advertiseHost,
-		Port: *portPtr,
-	}
+	// Create the address we'll advertise to other nodes
+	advertiseAddr := Address{IP: advertiseHost, Port: *portPtr}
 
-	// Create node
-	node, err := NewNode(network, addr)
+	// Debug logging
+	log.Printf("Creating node with advertise address: %s", advertiseAddr.String())
+
+	// Create node - it will handle listening internally
+	node, err := NewNode(network, advertiseAddr)
 	if err != nil {
 		log.Fatalf("Failed to create node: %v", err)
 	}
@@ -84,9 +89,9 @@ func startKademliaNode() {
 	}()
 
 	if *isBootstrapPtr {
-		log.Printf("Starting as bootstrap node on %s", addr.String())
+		log.Printf("Starting as bootstrap node on %s", advertiseAddr.String())
 	} else {
-		log.Printf("Starting node on %s, attempting to join via %s", addr.String(), *bootstrapAddrPtr)
+		log.Printf("Starting node on %s, attempting to join via %s", advertiseAddr.String(), *bootstrapAddrPtr)
 		parts := strings.Split(*bootstrapAddrPtr, ":")
 		if len(parts) == 2 {
 			bootPort, err := strconv.Atoi(parts[1])
@@ -112,10 +117,19 @@ func startKademliaNode() {
 	}
 
 	// Start interactive CLI (blocks until user exits)
-	fmt.Printf("Node %s started successfully\n", addr.String())
-	StartInteractiveNode(node)
+	fmt.Printf("Node %s started successfully\n", advertiseAddr.String())
 
-	// When interactive loop ends, stop node and wait for goroutine to finish, if you have Close implemented.
+	// Check if running in Docker (non-interactive environment)
+	if os.Getenv("DOCKER_ENV") == "true" {
+		log.Printf("Running in Docker mode - keeping node alive without interactive CLI")
+		// Keep the node running without interactive CLI
+		select {} // Block forever
+	} else {
+		// Only start interactive CLI if we're in a terminal
+		StartInteractiveNode(node)
+	}
+
+	// When interactive loop ends, stop node and wait for goroutine to finish
 	if closer, ok := interface{}(node).(interface{ Close() error }); ok {
 		_ = closer.Close()
 	}

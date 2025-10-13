@@ -380,8 +380,8 @@ func TestRoutingTableBucketCapacity(t *testing.T) {
 	// We'll use contacts with IDs that hash to the same bucket
 
 	// Add contacts until bucket is full
-	contacts := make([]Triple, BucketSize+5)
-	for i := 0; i < BucketSize+5; i++ {
+	contacts := make([]Triple, K+5)
+	for i := 0; i < K+5; i++ {
 		// Create contacts that will go to the same bucket by using similar IDs
 		contacts[i] = createRandomTriple()
 
@@ -392,8 +392,8 @@ func TestRoutingTableBucketCapacity(t *testing.T) {
 
 	// Check that no bucket exceeds capacity
 	for i, bucket := range rt.Buckets {
-		if bucket.Len() > BucketSize {
-			t.Errorf("Bucket %d has %d contacts, should not exceed %d", i, bucket.Len(), BucketSize)
+		if bucket.Len() > K {
+			t.Errorf("Bucket %d has %d contacts, should not exceed %d", i, bucket.Len(), K)
 		}
 	}
 }

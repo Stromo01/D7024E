@@ -15,7 +15,7 @@ type Bucket struct {
 // NewBucket creates a new bucket with an initial capacity defined by BucketSize.
 func NewBucket() *Bucket {
 	bucket := &Bucket{}
-	bucket.List = make([]*Triple, 0, BucketSize)
+	bucket.List = make([]*Triple, 0, K)
 	return bucket
 }
 
@@ -124,7 +124,7 @@ func (b *Bucket) Len() int {
 
 // IsFull checks if the bucket is at capacity
 func (b *Bucket) IsFull() bool {
-	return len(b.List) >= BucketSize
+	return len(b.List) >= K
 }
 
 // GetLeastRecentlyUsed returns the contact that should be evicted

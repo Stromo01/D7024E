@@ -10,7 +10,6 @@ import (
 	. "github.com/eislab-cps/go-template/pkg/kademlia"
 )
 
-const BucketSize = 8
 const IDLength = 20
 
 type RoutingTable struct {
@@ -25,7 +24,7 @@ func NewRoutingTable(Me Triple) *RoutingTable {
 	}
 	for i := range rt.Buckets {
 		rt.Buckets[i] = &Bucket{
-			List: make([]*Triple, 0, BucketSize),
+			List: make([]*Triple, 0, K),
 		}
 	}
 	return rt
@@ -34,7 +33,7 @@ func NewRoutingTable(Me Triple) *RoutingTable {
 func (rt *RoutingTable) GetKClosest(key string, K int) []Triple {
 	// Read lock for accessing buckets
 	rt.mu.RLock()
-    defer rt.mu.RUnlock()
+	defer rt.mu.RUnlock()
 
 	keyBytes := []byte(key)
 	type distTriple struct {

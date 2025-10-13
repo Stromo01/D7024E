@@ -15,7 +15,7 @@ func createRandomTriple() Triple {
 	rand.Read(id[:])
 	return Triple{
 		ID:   id[:],
-		Addr: Address{IP: "127.0.0.1", Port: 8000},	
+		Addr: Address{IP: "127.0.0.1", Port: 8000},
 		Port: 8000,
 	}
 }
@@ -131,8 +131,8 @@ func TestBucketAddContactToFull(t *testing.T) {
 	bucket := NewBucket()
 
 	// Fill the bucket to capacity
-	contacts := make([]Triple, BucketSize)
-	for i := 0; i < BucketSize; i++ {
+	contacts := make([]Triple, K)
+	for i := 0; i < K; i++ {
 		contacts[i] = createRandomTriple()
 		bucket.AddContact(contacts[i])
 	}
@@ -148,8 +148,8 @@ func TestBucketAddContactToFull(t *testing.T) {
 	newContact := createRandomTriple()
 	bucket.AddContact(newContact)
 
-	if bucket.Len() != BucketSize {
-		t.Errorf("Bucket length should remain %d after adding to full bucket, got %d", BucketSize, bucket.Len())
+	if bucket.Len() != K {
+		t.Errorf("Bucket length should remain %d after adding to full bucket, got %d", K, bucket.Len())
 	}
 
 	if !bucket.Contains(newContact) {
@@ -171,8 +171,8 @@ func TestBucketAddExistingContactToFull(t *testing.T) {
 	bucket := NewBucket()
 
 	// Fill the bucket to capacity
-	contacts := make([]Triple, BucketSize)
-	for i := 0; i < BucketSize; i++ {
+	contacts := make([]Triple, K)
+	for i := 0; i < K; i++ {
 		contacts[i] = createRandomTriple()
 		bucket.AddContact(contacts[i])
 	}
@@ -181,8 +181,8 @@ func TestBucketAddExistingContactToFull(t *testing.T) {
 	firstContact := contacts[0]
 	bucket.AddContact(firstContact)
 
-	if bucket.Len() != BucketSize {
-		t.Errorf("Bucket length should remain %d when re-adding existing contact, got %d", BucketSize, bucket.Len())
+	if bucket.Len() != K {
+		t.Errorf("Bucket length should remain %d when re-adding existing contact, got %d", K, bucket.Len())
 	}
 
 	// Should be moved to front
@@ -384,7 +384,7 @@ func TestBucketIsFull(t *testing.T) {
 	}
 
 	// Fill bucket to capacity - 1
-	for i := 0; i < BucketSize-1; i++ {
+	for i := 0; i < K-1; i++ {
 		triple := createRandomTriple()
 		bucket.AddContact(triple)
 	}

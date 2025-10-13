@@ -19,6 +19,7 @@ func (n *Node) iterativeFindValue(key string) ([]byte, bool) {
 
 func (n *Node) iterativeFindNode(key string) []Triple {
 	nodes, _, _ := n.nodeLookup(key, false)
+	fmt.Printf("Found nodes for key %s: %s\n", key, nodes)
 	return nodes
 }
 func (n *Node) IterativeStore(key string, value []byte) {

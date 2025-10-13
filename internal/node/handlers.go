@@ -43,7 +43,7 @@ func (node *Node) handlePing(msg Message) error {
 }
 
 func (node *Node) handlePong(msg Message) error {
-	fmt.Printf("Node %s received PONG from %s (ID: %x)\n",
+	fmt.Printf("Node %s received pong from %s (ID: %x)\n",
 		node.Address().String(),
 		msg.From.String(),
 		msg.FromContact.ID)
@@ -59,6 +59,11 @@ func (node *Node) handlePong(msg Message) error {
 }
 
 func (node *Node) handleFindNode(msg Message) error {
+	fmt.Printf("Node %s received find_node from %s (ID: %x)\n",
+		node.Address().String(),
+		msg.From.String(),
+		msg.FromContact.ID)
+
 	// Expect payload as "key"
 	key := string(msg.Payload)
 	closest := node.routing.GetKClosest(key, K)
@@ -68,6 +73,11 @@ func (node *Node) handleFindNode(msg Message) error {
 
 func (node *Node) handleFindNodeResponse(msg Message) error {
 	// Expect payload as "addr1:port1:id1,addr2:port2:id2,..."
+	fmt.Printf("Node %s received find_node_response from %s (ID: %x)\n",
+		node.Address().String(),
+		msg.From.String(),
+		msg.FromContact.ID)
+
 	payload := string(msg.Payload)
 	if payload != "" {
 		triples, err := tripleDeserialize(payload)
@@ -82,6 +92,10 @@ func (node *Node) handleFindNodeResponse(msg Message) error {
 }
 
 func (node *Node) handleFindValue(msg Message) error {
+	fmt.Printf("Node %s received find_value from %s (ID: %x)\n",
+		node.Address().String(),
+		msg.From.String(),
+		msg.FromContact.ID)
 	key := string(msg.Payload)
 
 	// Add the sender to routing table

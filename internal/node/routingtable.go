@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math/big"
 	"sort"
+	"sync"
 
 	. "github.com/eislab-cps/go-template/pkg/kademlia"
 )
@@ -15,6 +16,7 @@ const IDLength = 20
 type RoutingTable struct {
 	Me      Triple
 	Buckets [IDLength * 8]*Bucket
+	mu      sync.RWMutex
 }
 
 func NewRoutingTable(Me Triple) *RoutingTable {
@@ -30,6 +32,10 @@ func NewRoutingTable(Me Triple) *RoutingTable {
 }
 
 func (rt *RoutingTable) GetKClosest(key string, K int) []Triple {
+	// Read lock for accessing buckets
+	rt.mu.RLock()
+    defer rt.mu.RUnlock()
+
 	keyBytes := []byte(key)
 	type distTriple struct {
 		dist    *big.Int
@@ -56,6 +62,8 @@ func (rt *RoutingTable) GetKClosest(key string, K int) []Triple {
 }
 
 func (rt *RoutingTable) AddContact(contact Triple) {
+	rt.mu.RLock() // Read lock for getting bucket
+	fmt.Printf("Adding contact %s (ID: %x) to routing table\n", contact.Addr.String(), contact.ID)
 
 	if bytes.Equal(contact.ID, rt.Me.ID) {
 		return // Don't add ourselves
@@ -70,6 +78,9 @@ func (rt *RoutingTable) AddContact(contact Triple) {
 	fmt.Printf("Adding contact %s (ID: %x) to routing table\n", contact.Addr.String(), contact.ID)
 	bucketIndex := rt.GetBucketIndex(contact.ID)
 	bucket := rt.Buckets[bucketIndex]
+	rt.mu.RUnlock()
+
+	// Bucket handles its own locking
 	bucket.AddContact(contact)
 }
 

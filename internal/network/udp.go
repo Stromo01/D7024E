@@ -3,6 +3,7 @@ package network
 import (
 	"fmt"
 	"net"
+	"sync"
 
 	. "github.com/eislab-cps/go-template/pkg/kademlia"
 )
@@ -14,10 +15,13 @@ type UDPConnection struct {
 	connected bool
 	remote    *net.UDPAddr
 	network   *UDPNetwork
+	sendMu    sync.Mutex
 }
 
 // Send transmits a message through the UDP connection
 func (c *UDPConnection) Send(msg Message) error {
+	c.sendMu.Lock() // Serialize send operations
+	defer c.sendMu.Unlock()
 	wire, err := encodeWireMessage(WireMessage{
 		FromContact: msg.FromContact,
 		Type:        msg.Type,

@@ -11,12 +11,9 @@ import (
 type UDPConnection struct {
 	conn      *net.UDPConn
 	localAddr Address
-
-	// For connected sockets (Dial)
 	connected bool
 	remote    *net.UDPAddr
-
-	network *UDPNetwork
+	network   *UDPNetwork
 }
 
 // Send transmits a message through the UDP connection

@@ -77,25 +77,31 @@ type MessageHandler func(msg Message) error
 
 // NewNode creates a new node that can both send and receive messages
 func NewNode(network Network, addr Address) (*Node, error) {
-	connection, err := network.Listen(addr)
+	bindAddr := Address{IP: "0.0.0.0", Port: addr.Port}
+
+	connection, err := network.Listen(bindAddr)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create node: %v", err)
 	}
 
 	actualAddr := AddressFromNetAddr(connection.LocalAddr())
 
+	advertiseAddr := addr
+	if addr.IP == "" || addr.IP == "0.0.0.0" {
+		advertiseAddr = actualAddr
+	}
+
 	var id [20]byte
-	_, err = rand.Read(id[:])
-	if err != nil {
+	if _, err := rand.Read(id[:]); err != nil {
 		return nil, fmt.Errorf("failed to generate node ID: %v", err)
 	}
 	node := &Node{
 		Id:         id,
-		Addr:       actualAddr,
+		Addr:       advertiseAddr,
 		network:    network,
 		connection: connection,
 		handlers:   make(map[string]MessageHandler),
-		routing:    NewRoutingTable(Triple{ID: id[:], Addr: actualAddr, Port: actualAddr.Port}),
+		routing:    NewRoutingTable(Triple{ID: id[:], Addr: advertiseAddr, Port: advertiseAddr.Port}),
 		store:      make(map[string][]byte),
 		pending:    make(map[[20]byte]chan Message),
 	}
@@ -280,11 +286,8 @@ func (n *Node) Start() {
 
 // Send sends a message to the target address
 func (n *Node) Send(to Address, msgType string, data []byte) error {
-	// Format payload as "msgType:data"
-
 	actualAddr := AddressFromNetAddr(n.connection.LocalAddr())
 
-	// Create the message with proper FromContact
 	msg := Message{
 		From:        actualAddr,
 		FromContact: Triple{ID: n.Id[:], Addr: actualAddr, Port: actualAddr.Port},
@@ -294,13 +297,7 @@ func (n *Node) Send(to Address, msgType string, data []byte) error {
 		Network:     n.network,
 	}
 
-	// Use the listening connection for sending (maintains source port)
 	return n.connection.Send(msg)
-}
-
-// SendString is a convenience method for sending string messages
-func (n *Node) SendString(to Address, msgType, data string) error {
-	return n.Send(to, msgType, []byte(data))
 }
 
 // Close shuts down the node

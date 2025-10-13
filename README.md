@@ -5,6 +5,20 @@ docker-compose up --build -d bootstrap
 
 docker-compose up -d --scale node=49 node
 
+
+
+# Run commands on node
+
+First, find your running containers
+docker ps
+
+Look for container names like:
+d7024e-bootstrap-1 or d7024e_bootstrap_1
+
+Then attach directly to the main process 
+docker attach d7024e-bootstrap-1
+
+
 # Go Project Template
 
 This repository provides example code for setting up an empty Go project following best practices.

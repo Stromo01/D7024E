@@ -1,4 +1,4 @@
-package main
+package node_test
 
 import (
 	"context"
@@ -6,6 +6,11 @@ import (
 	"fmt"
 	"testing"
 	"time"
+
+	. "github.com/eislab-cps/go-template/internal/network"
+	. "github.com/eislab-cps/go-template/internal/node"
+	. "github.com/eislab-cps/go-template/pkg/kademlia"
+	. "github.com/eislab-cps/go-template/test/network_test"
 )
 
 func TestPingPong(t *testing.T) {
@@ -565,7 +570,7 @@ func TestDistributedStorage(t *testing.T) {
 	// Connect nodes to each other
 	for i := 1; i < len(nodes); i++ {
 		bootstrapTriple := Triple{
-			ID:   nodes[0].id[:],
+			ID:   nodes[0].Id[:],
 			Addr: addrs[0],
 			Port: addrs[0].Port,
 		}
@@ -635,7 +640,7 @@ func TestNetworkDiscovery(t *testing.T) {
 	// Connect each node to the bootstrap (node 0)
 	for i := 1; i < len(nodes); i++ {
 		bootstrapTriple := Triple{
-			ID:   nodes[0].id[:],
+			ID:   nodes[0].Id[:],
 			Addr: addrs[0],
 			Port: addrs[0].Port,
 		}
@@ -684,7 +689,7 @@ func TestFindValueFlow(t *testing.T) {
 	node3.Start()
 
 	// Connect nodes
-	triple1 := Triple{ID: node1.id[:], Addr: node1.addr, Port: node1.addr.Port}
+	triple1 := Triple{ID: node1.Id[:], Addr: node1.Addr, Port: node1.Addr.Port}
 	node2.JoinNetwork(triple1)
 	node3.JoinNetwork(triple1)
 

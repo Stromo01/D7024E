@@ -9,6 +9,9 @@ import (
 	"strings"
 
 	"github.com/eislab-cps/go-template/internal/cli"
+	. "github.com/eislab-cps/go-template/internal/network"
+	. "github.com/eislab-cps/go-template/internal/node"
+	. "github.com/eislab-cps/go-template/pkg/kademlia"
 )
 
 func main() {

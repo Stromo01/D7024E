@@ -1,10 +1,12 @@
-package main
+package network
 
 import (
 	"encoding/json"
 	"fmt"
 	"net"
 	"time"
+
+	. "github.com/eislab-cps/go-template/pkg/kademlia"
 )
 
 // Kademlia message types
@@ -15,15 +17,6 @@ const (
 	MsgFindValue = "FIND_VALUE"
 	MsgStore     = "STORE"
 )
-
-type Address struct {
-	IP   string
-	Port int // 1-65535
-}
-
-func (a Address) String() string {
-	return fmt.Sprintf("%s:%d", a.IP, a.Port)
-}
 
 type Network interface {
 	Listen(addr Address) (Connection, error)
@@ -46,7 +39,7 @@ type Message struct {
 	FromContact Triple
 	To          Address
 	Payload     []byte
-	network     Network // Reference to network for replies
+	Network     Network
 }
 
 // UDPNetwork implements real UDP networking
@@ -192,7 +185,7 @@ func (c *UDPConnection) Recv() (Message, error) {
 			FromContact: wire.FromContact,
 			To:          c.localAddr,
 			Payload:     wire.Payload,
-			network:     c.network,
+			Network:     c.network,
 		}, nil
 	}
 
@@ -214,7 +207,7 @@ func (c *UDPConnection) Recv() (Message, error) {
 		FromContact: wire.FromContact,
 		To:          c.localAddr,
 		Payload:     wire.Payload,
-		network:     c.network,
+		Network:     c.network,
 	}, nil
 }
 
@@ -339,7 +332,7 @@ func SendPing(network Network, from, to Address) error {
 		From:    from,
 		To:      to,
 		Payload: []byte(MsgPing + ":ping"),
-		network: network,
+		Network: network,
 	}
 
 	return conn.Send(msg)
@@ -356,7 +349,7 @@ func (m Message) Reply(msgType string, data []byte) error {
 	}
 
 	// Create connection to sender
-	connection, err := m.network.Dial(m.From)
+	connection, err := m.Network.Dial(m.From)
 	if err != nil {
 		return fmt.Errorf("failed to dial %s: %v", m.From.String(), err)
 	}
@@ -367,7 +360,7 @@ func (m Message) Reply(msgType string, data []byte) error {
 		From:    m.To,
 		To:      m.From,
 		Payload: payload,
-		network: m.network,
+		Network: m.Network,
 	}
 
 	return connection.Send(reply)

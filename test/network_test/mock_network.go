@@ -1,9 +1,12 @@
-package main
+package network_test
 
 import (
 	"errors"
 	"net"
 	"sync"
+
+	. "github.com/eislab-cps/go-template/internal/network"
+	. "github.com/eislab-cps/go-template/pkg/kademlia"
 )
 
 type mockNetwork struct {
@@ -81,7 +84,7 @@ func (c *mockConnection) Send(msg Message) error {
 	}
 
 	// Add network reference for replies
-	msg.network = c.network
+	msg.Network = c.network
 
 	// Keep the lock while enqueueing
 	select {

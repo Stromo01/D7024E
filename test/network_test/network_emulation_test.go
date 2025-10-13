@@ -1,4 +1,4 @@
-package main
+package network_test
 
 import (
 	"crypto/sha1"
@@ -7,6 +7,10 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	. "github.com/eislab-cps/go-template/internal/network"
+	. "github.com/eislab-cps/go-template/internal/node"
+	. "github.com/eislab-cps/go-template/pkg/kademlia"
 )
 
 // Configuration constants - easy to change
@@ -109,9 +113,9 @@ func TestLargeScaleNetwork1000Nodes(t *testing.T) {
 
 	for i := 1; i < maxConnections; i++ {
 		triple := Triple{
-			ID:   nodes[0].id[:],
-			Addr: nodes[0].addr,
-			Port: nodes[0].addr.Port,
+			ID:   nodes[0].Id[:],
+			Addr: nodes[0].Addr,
+			Port: nodes[0].Addr.Port,
 		}
 		err := nodes[i].JoinNetwork(triple)
 		if err != nil {
@@ -171,7 +175,7 @@ func TestLargeScaleNetwork1000Nodes(t *testing.T) {
 	// Test basic message sending capability across the network
 	messagesSent := 0
 	for i := 0; i < min(10, TestNodeCount-1); i++ {
-		err := nodes[i].Send(nodes[i+1].addr, "test", []byte("hello"))
+		err := nodes[i].Send(nodes[i+1].Addr, "test", []byte("hello"))
 		if err == nil {
 			messagesSent++
 		}
@@ -222,9 +226,9 @@ func testLargeScaleNetwork(t *testing.T, nodeCount int, dropRate float64) {
 
 	for i := 1; i <= maxConnections; i++ {
 		triple := Triple{
-			ID:   nodes[0].id[:],
-			Addr: nodes[0].addr,
-			Port: nodes[0].addr.Port,
+			ID:   nodes[0].Id[:],
+			Addr: nodes[0].Addr,
+			Port: nodes[0].Addr.Port,
 		}
 		err := nodes[i].JoinNetwork(triple)
 		if err != nil {

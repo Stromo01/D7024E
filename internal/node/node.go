@@ -1,4 +1,4 @@
-package main
+package node
 
 import (
 	"bytes"
@@ -11,14 +11,17 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	. "github.com/eislab-cps/go-template/internal/network"
+	. "github.com/eislab-cps/go-template/pkg/kademlia"
 )
 
 // XOR distance between two keys (as hex strings)
 // Removed duplicate definition of xorDistance
 
 type Node struct {
-	id         [20]byte // 160 bits
-	addr       Address
+	Id         [20]byte // 160 bits
+	Addr       Address
 	network    Network
 	connection Connection
 	handlers   map[string]MessageHandler
@@ -29,12 +32,6 @@ type Node struct {
 	closeMu    sync.RWMutex
 	pending    map[[20]byte]chan Message
 	pendingMu  sync.Mutex
-}
-
-type Triple struct {
-	ID   []byte
-	Addr Address
-	Port int
 }
 
 const K = 8     // Kademlia bucket size and number of closest nodes to return
@@ -60,7 +57,7 @@ func (n *Node) StoreAtK(key string, value []byte, k int) error {
 
 	for _, contact := range closest {
 		// Skip ourselves (compare IDs, not addresses)
-		if bytes.Equal(contact.ID, n.id[:]) {
+		if bytes.Equal(contact.ID, n.Id[:]) {
 			continue
 		}
 
@@ -108,7 +105,7 @@ func (n *Node) FindObjectLocally(key string) ([]byte, bool) {
 func (n *Node) FindObject(key string) ([]byte, string, bool) {
 	// First check locally
 	if value, found := n.FindObjectLocally(key); found {
-		return value, n.addr.String(), true
+		return value, n.Addr.String(), true
 	}
 
 	// Use iterative find value for network lookup
@@ -134,8 +131,8 @@ func NewNode(network Network, addr Address) (*Node, error) {
 		return nil, fmt.Errorf("failed to generate node ID: %v", err)
 	}
 	node := &Node{
-		id:         id,
-		addr:       addr,
+		Id:         id,
+		Addr:       addr,
 		network:    network,
 		connection: connection,
 		handlers:   make(map[string]MessageHandler),
@@ -156,7 +153,7 @@ func NewNode(network Network, addr Address) (*Node, error) {
 
 			// Add the sender to routing table
 			if len(msg.FromContact.ID) > 0 {
-				node.routing.addContact(msg.FromContact)
+				node.routing.AddContact(msg.FromContact)
 			}
 		}
 		return nil
@@ -176,7 +173,7 @@ func NewNode(network Network, addr Address) (*Node, error) {
 			Port: msg.FromContact.Port,
 		}
 
-		node.routing.addContact(contactToAdd)
+		node.routing.AddContact(contactToAdd)
 		return node.Send(msg.FromContact.Addr, MsgPong, []byte("pong"))
 	})
 
@@ -193,7 +190,7 @@ func NewNode(network Network, addr Address) (*Node, error) {
 			Port: msg.FromContact.Port,
 		}
 
-		node.routing.addContact(contactToAdd)
+		node.routing.AddContact(contactToAdd)
 		return nil
 	})
 
@@ -214,7 +211,7 @@ func NewNode(network Network, addr Address) (*Node, error) {
 				return fmt.Errorf("invalid find_node_response payload: %v", err)
 			}
 			for _, t := range triples {
-				node.routing.addContact(t)
+				node.routing.AddContact(t)
 			}
 		}
 		return nil
@@ -225,7 +222,7 @@ func NewNode(network Network, addr Address) (*Node, error) {
 
 		// Add the sender to routing table
 		if len(msg.FromContact.ID) > 0 {
-			node.routing.addContact(msg.FromContact)
+			node.routing.AddContact(msg.FromContact)
 		}
 
 		// Check if we have the value
@@ -255,7 +252,7 @@ func (n *Node) sortByDistance(key string, nodes []Triple) []Triple {
 
 func (n *Node) GetAllContacts() []Triple {
 	var contacts []Triple
-	for _, bucket := range n.routing.buckets {
+	for _, bucket := range n.routing.Buckets {
 		if bucket != nil {
 			// Use GetAllContacts() method from bucket
 			contacts = append(contacts, bucket.GetAllContacts()...)
@@ -528,7 +525,7 @@ func (n *Node) nodeLookup(key string) []Triple {
 
 func (n *Node) searchShortlist(key string, shortlist []Triple, responses chan []Triple, wg *sync.WaitGroup, expectedResponses int, searched []Triple) {
 	for _, contact := range shortlist {
-		if contact.Addr == n.addr {
+		if contact.Addr == n.Addr {
 			continue
 		}
 		for _, s := range searched {
@@ -611,7 +608,7 @@ func (n *Node) JoinNetwork(bootstrapNode Triple) error {
 	time.Sleep(100 * time.Millisecond)
 
 	// Send find_node for our own ID to populate routing table
-	err = n.Send(bootstrapNode.Addr, "find_node", []byte(fmt.Sprintf("%x", n.id)))
+	err = n.Send(bootstrapNode.Addr, "find_node", []byte(fmt.Sprintf("%x", n.Id)))
 	if err != nil {
 		return fmt.Errorf("failed to send find_node to %s: %v", bootstrapNode.Addr.String(), err)
 	}
@@ -663,7 +660,7 @@ func (n *Node) Start() {
 		if err != nil {
 			n.closeMu.RLock()
 			if !n.closed {
-				log.Printf("Node %s failed to receive message: %v", n.addr.String(), err)
+				log.Printf("Node %s failed to receive message: %v", n.Addr.String(), err)
 			}
 			n.closeMu.RUnlock()
 			return
@@ -722,11 +719,11 @@ func (n *Node) Send(to Address, msgType string, data []byte) error {
 
 	// Create the message with proper FromContact
 	msg := Message{
-		From:        n.addr,
-		FromContact: Triple{ID: n.id[:], Addr: n.addr, Port: n.addr.Port},
+		From:        n.Addr,
+		FromContact: Triple{ID: n.Id[:], Addr: n.Addr, Port: n.Addr.Port},
 		To:          to,
 		Payload:     payload,
-		network:     n.network,
+		Network:     n.network,
 	}
 
 	// Use the listening connection for sending (maintains source port)
@@ -748,5 +745,5 @@ func (n *Node) Close() error {
 
 // Address returns the node's address
 func (n *Node) Address() Address {
-	return n.addr
+	return n.Addr
 }

@@ -1,27 +1,29 @@
-package main
+package node
 
 import (
 	"bytes"
 	"fmt"
 	"math/big"
 	"sort"
+
+	. "github.com/eislab-cps/go-template/pkg/kademlia"
 )
 
 const BucketSize = 8
 const IDLength = 20
 
 type RoutingTable struct {
-	me      Triple
-	buckets [IDLength * 8]*Bucket
+	Me      Triple
+	Buckets [IDLength * 8]*Bucket
 }
 
-func NewRoutingTable(me Triple) *RoutingTable {
+func NewRoutingTable(Me Triple) *RoutingTable {
 	rt := &RoutingTable{
-		me: me,
+		Me: Me,
 	}
-	for i := range rt.buckets {
-		rt.buckets[i] = &Bucket{
-			list: make([]*Triple, 0, BucketSize),
+	for i := range rt.Buckets {
+		rt.Buckets[i] = &Bucket{
+			List: make([]*Triple, 0, BucketSize),
 		}
 	}
 	return rt
@@ -35,8 +37,8 @@ func (rt *RoutingTable) getKClosest(key string, K int) []Triple {
 	}
 	var all []distTriple
 
-	for _, bucket := range rt.buckets {
-		for _, contact := range bucket.list {
+	for _, bucket := range rt.Buckets {
+		for _, contact := range bucket.List {
 			d := xorDistance(keyBytes, contact.ID)
 			all = append(all, distTriple{dist: d, contact: *contact})
 		}
@@ -53,28 +55,28 @@ func (rt *RoutingTable) getKClosest(key string, K int) []Triple {
 	return result
 }
 
-func (rt *RoutingTable) addContact(contact Triple) {
+func (rt *RoutingTable) AddContact(contact Triple) {
 	fmt.Printf("Adding contact %s (ID: %x) to routing table\n", contact.Addr.String(), contact.ID)
-	if bytes.Equal(contact.ID, rt.me.ID) {
+	if bytes.Equal(contact.ID, rt.Me.ID) {
 		return // Don't add ourselves
 	}
 
-	bucketIndex := rt.getBucketIndex(contact.ID)
-	bucket := rt.buckets[bucketIndex]
+	bucketIndex := rt.GetBucketIndex(contact.ID)
+	bucket := rt.Buckets[bucketIndex]
 	bucket.AddContact(contact)
 }
 
 func (rt *RoutingTable) RemoveContact(contact Triple) {
-	bucketIndex := rt.getBucketIndex(contact.ID)
-	bucket := rt.buckets[bucketIndex]
+	bucketIndex := rt.GetBucketIndex(contact.ID)
+	bucket := rt.Buckets[bucketIndex]
 	bucket.RemoveContact(contact)
-	// bucket := rt.buckets[bucketI] // Uncomment and use as needed
+	// bucket := rt.Buckets[bucketI] // Uncomment and use as needed
 	// rt.insertContact(distance, contact) // Update as needed
 
 }
 
-func (routingTable *RoutingTable) getBucketIndex(nodeID []byte) int {
-	distance := xorDistance(routingTable.me.ID, nodeID)
+func (routingTable *RoutingTable) GetBucketIndex(nodeID []byte) int {
+	distance := xorDistance(routingTable.Me.ID, nodeID)
 	// If distance is 0 (identical IDs), return bucket 0
 	if distance.Sign() == 0 {
 		return 0

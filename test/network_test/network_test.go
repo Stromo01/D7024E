@@ -1,9 +1,11 @@
-package main
+package network_test
 
 import (
 	"net"
 	"testing"
-	
+
+	. "github.com/eislab-cps/go-template/internal/network"
+	. "github.com/eislab-cps/go-template/pkg/kademlia"
 )
 
 func TestAddress_String(t *testing.T) {
@@ -118,7 +120,7 @@ func TestMessage_Reply_WithUDP(t *testing.T) {
 		From:    toAddr,
 		To:      fromAddr,
 		Payload: []byte("test"),
-		network: network,
+		Network: network,
 	}
 
 	// Test reply - this will fail because toAddr isn't listening, but that's expected

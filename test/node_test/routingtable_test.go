@@ -1,30 +1,33 @@
-package main
+package node_test
 
 import (
 	"bytes"
 	"math/big"
 	"testing"
+
+	. "github.com/eislab-cps/go-template/internal/node"
+	. "github.com/eislab-cps/go-template/pkg/kademlia"
 )
 
 func TestNewRoutingTable(t *testing.T) {
-	me := createRandomTriple()
-	rt := NewRoutingTable(me)
+	Me := createRandomTriple()
+	rt := NewRoutingTable(Me)
 
 	if rt == nil {
 		t.Fatal("NewRoutingTable() returned nil")
 	}
 
-	if !bytes.Equal(rt.me.ID, me.ID) {
+	if !bytes.Equal(rt.Me.ID, Me.ID) {
 		t.Error("Routing table should store the correct node ID")
 	}
 
-	// Check that all buckets are initialized
+	// Check that all Buckets are initialized
 	expectedBuckets := IDLength * 8
-	if len(rt.buckets) != expectedBuckets {
-		t.Errorf("Expected %d buckets, got %d", expectedBuckets, len(rt.buckets))
+	if len(rt.Buckets) != expectedBuckets {
+		t.Errorf("Expected %d Buckets, got %d", expectedBuckets, len(rt.Buckets))
 	}
 
-	for i, bucket := range rt.buckets {
+	for i, bucket := range rt.Buckets {
 		if bucket == nil {
 			t.Errorf("Bucket %d should be initialized", i)
 		}
@@ -35,15 +38,15 @@ func TestNewRoutingTable(t *testing.T) {
 }
 
 func TestRoutingTableAddContact(t *testing.T) {
-	me := createRandomTriple()
-	rt := NewRoutingTable(me)
+	Me := createRandomTriple()
+	rt := NewRoutingTable(Me)
 	contact := createRandomTriple()
 
-	rt.addContact(contact)
+	rt.AddContact(contact)
 
 	// Find the bucket where the contact should be
-	bucketIndex := rt.getBucketIndex(contact.ID)
-	bucket := rt.buckets[bucketIndex]
+	bucketIndex := rt.GetBucketIndex(contact.ID)
+	bucket := rt.Buckets[bucketIndex]
 
 	if !bucket.Contains(contact) {
 		t.Error("Contact should be added to the correct bucket")
@@ -55,18 +58,18 @@ func TestRoutingTableAddContact(t *testing.T) {
 }
 
 func TestRoutingTableAddMultipleContacts(t *testing.T) {
-	me := createRandomTriple()
-	rt := NewRoutingTable(me)
+	Me := createRandomTriple()
+	rt := NewRoutingTable(Me)
 
 	contacts := make([]Triple, 10)
 	for i := 0; i < 10; i++ {
 		contacts[i] = createRandomTriple()
-		rt.addContact(contacts[i])
+		rt.AddContact(contacts[i])
 	}
 
 	// Verify all contacts are added
 	totalContacts := 0
-	for _, bucket := range rt.buckets {
+	for _, bucket := range rt.Buckets {
 		totalContacts += bucket.Len()
 	}
 
@@ -76,8 +79,8 @@ func TestRoutingTableAddMultipleContacts(t *testing.T) {
 
 	// Verify each contact is in the correct bucket
 	for _, contact := range contacts {
-		bucketIndex := rt.getBucketIndex(contact.ID)
-		bucket := rt.buckets[bucketIndex]
+		bucketIndex := rt.GetBucketIndex(contact.ID)
+		bucket := rt.Buckets[bucketIndex]
 
 		if !bucket.Contains(contact) {
 			t.Errorf("Contact should be in bucket %d", bucketIndex)
@@ -86,16 +89,16 @@ func TestRoutingTableAddMultipleContacts(t *testing.T) {
 }
 
 func TestRoutingTableRemoveContact(t *testing.T) {
-	me := createRandomTriple()
-	rt := NewRoutingTable(me)
+	Me := createRandomTriple()
+	rt := NewRoutingTable(Me)
 	contact := createRandomTriple()
 
 	// Add contact first
-	rt.addContact(contact)
+	rt.AddContact(contact)
 
 	// Verify it's added
-	bucketIndex := rt.getBucketIndex(contact.ID)
-	bucket := rt.buckets[bucketIndex]
+	bucketIndex := rt.GetBucketIndex(contact.ID)
+	bucket := rt.Buckets[bucketIndex]
 	if !bucket.Contains(contact) {
 		t.Fatal("Contact should be added before removal test")
 	}
@@ -113,19 +116,19 @@ func TestRoutingTableRemoveContact(t *testing.T) {
 }
 
 func TestRoutingTableRemoveNonExistentContact(t *testing.T) {
-	me := createRandomTriple()
-	rt := NewRoutingTable(me)
+	Me := createRandomTriple()
+	rt := NewRoutingTable(Me)
 	contact1 := createRandomTriple()
 	contact2 := createRandomTriple()
 
-	rt.addContact(contact1)
+	rt.AddContact(contact1)
 
 	// Try to remove contact that doesn't exist
 	rt.RemoveContact(contact2)
 
 	// contact1 should still be there
-	bucketIndex := rt.getBucketIndex(contact1.ID)
-	bucket := rt.buckets[bucketIndex]
+	bucketIndex := rt.GetBucketIndex(contact1.ID)
+	bucket := rt.Buckets[bucketIndex]
 
 	if !bucket.Contains(contact1) {
 		t.Error("Original contact should still be in routing table")
@@ -133,8 +136,8 @@ func TestRoutingTableRemoveNonExistentContact(t *testing.T) {
 }
 
 func TestRoutingTableGetBucketIndex(t *testing.T) {
-	me := createTripleWithID(make([]byte, 20)) // All zeros
-	rt := NewRoutingTable(me)
+	Me := createTripleWithID(make([]byte, 20)) // All zeros
+	rt := NewRoutingTable(Me)
 
 	testCases := []struct {
 		description string
@@ -172,45 +175,45 @@ func TestRoutingTableGetBucketIndex(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.description, func(t *testing.T) {
-			index := rt.getBucketIndex(tc.id)
+			index := rt.GetBucketIndex(tc.id)
 
 			if index < tc.expectedMin || index > tc.expectedMax {
 				t.Errorf("Expected bucket index between %d and %d for %s, got %d",
 					tc.expectedMin, tc.expectedMax, tc.description, index)
 			}
 
-			if index < 0 || index >= len(rt.buckets) {
-				t.Errorf("Bucket index %d is out of range [0, %d)", index, len(rt.buckets))
+			if index < 0 || index >= len(rt.Buckets) {
+				t.Errorf("Bucket index %d is out of range [0, %d)", index, len(rt.Buckets))
 			}
 		})
 	}
 }
 
 func TestRoutingTableGetBucketIndexBounds(t *testing.T) {
-	me := createRandomTriple()
-	rt := NewRoutingTable(me)
+	Me := createRandomTriple()
+	rt := NewRoutingTable(Me)
 
 	// Test with various random IDs to ensure bucket index is always valid
 	for i := 0; i < 100; i++ {
 		contact := createRandomTriple()
-		index := rt.getBucketIndex(contact.ID)
+		index := rt.GetBucketIndex(contact.ID)
 
-		if index < 0 || index >= len(rt.buckets) {
+		if index < 0 || index >= len(rt.Buckets) {
 			t.Errorf("Bucket index %d is out of range [0, %d) for iteration %d",
-				index, len(rt.buckets), i)
+				index, len(rt.Buckets), i)
 		}
 	}
 }
 
 func TestRoutingTableGetKClosest(t *testing.T) {
-	me := createRandomTriple()
-	rt := NewRoutingTable(me)
+	Me := createRandomTriple()
+	rt := NewRoutingTable(Me)
 
 	// Add some contacts
 	contacts := make([]Triple, 10)
 	for i := 0; i < 10; i++ {
 		contacts[i] = createRandomTriple()
-		rt.addContact(contacts[i])
+		rt.AddContact(contacts[i])
 	}
 
 	targetKey := "test_key"
@@ -238,8 +241,8 @@ func TestRoutingTableGetKClosest(t *testing.T) {
 }
 
 func TestRoutingTableGetKClosestEmptyTable(t *testing.T) {
-	me := createRandomTriple()
-	rt := NewRoutingTable(me)
+	Me := createRandomTriple()
+	rt := NewRoutingTable(Me)
 
 	closest := rt.getKClosest("test_key", 5)
 
@@ -249,13 +252,13 @@ func TestRoutingTableGetKClosestEmptyTable(t *testing.T) {
 }
 
 func TestRoutingTableGetKClosestMoreThanAvailable(t *testing.T) {
-	me := createRandomTriple()
-	rt := NewRoutingTable(me)
+	Me := createRandomTriple()
+	rt := NewRoutingTable(Me)
 
 	// Add only 3 contacts
 	for i := 0; i < 3; i++ {
 		contact := createRandomTriple()
-		rt.addContact(contact)
+		rt.AddContact(contact)
 	}
 
 	// Request 10 closest (more than available)
@@ -267,11 +270,11 @@ func TestRoutingTableGetKClosestMoreThanAvailable(t *testing.T) {
 }
 
 func TestRoutingTableGetKClosestSingleContact(t *testing.T) {
-	me := createRandomTriple()
-	rt := NewRoutingTable(me)
+	Me := createRandomTriple()
+	rt := NewRoutingTable(Me)
 
 	contact := createRandomTriple()
-	rt.addContact(contact)
+	rt.AddContact(contact)
 
 	closest := rt.getKClosest("test_key", 5)
 
@@ -285,11 +288,11 @@ func TestRoutingTableGetKClosestSingleContact(t *testing.T) {
 }
 
 func TestRoutingTableGetKClosestZeroK(t *testing.T) {
-	me := createRandomTriple()
-	rt := NewRoutingTable(me)
+	Me := createRandomTriple()
+	rt := NewRoutingTable(Me)
 
 	contact := createRandomTriple()
-	rt.addContact(contact)
+	rt.AddContact(contact)
 
 	closest := rt.getKClosest("test_key", 0)
 
@@ -299,8 +302,8 @@ func TestRoutingTableGetKClosestZeroK(t *testing.T) {
 }
 
 func TestRoutingTableBucketDistribution(t *testing.T) {
-	me := createTripleWithID(make([]byte, 20)) // All zeros for predictable bucket distribution
-	rt := NewRoutingTable(me)
+	Me := createTripleWithID(make([]byte, 20)) // All zeros for predictable bucket distribution
+	rt := NewRoutingTable(Me)
 
 	// Create contacts with known bit patterns to test distribution
 	testContacts := []struct {
@@ -345,13 +348,13 @@ func TestRoutingTableBucketDistribution(t *testing.T) {
 	for _, tc := range testContacts {
 		t.Run(tc.description, func(t *testing.T) {
 			contact := createTripleWithID(tc.id)
-			bucketIndex := rt.getBucketIndex(contact.ID)
+			bucketIndex := rt.GetBucketIndex(contact.ID)
 
 			// Add the contact
-			rt.addContact(contact)
+			rt.AddContact(contact)
 
 			// Verify it's in the correct bucket (or not added if it's identical)
-			bucket := rt.buckets[bucketIndex]
+			bucket := rt.Buckets[bucketIndex]
 
 			if tc.shouldAdd {
 				if !bucket.Contains(contact) {
@@ -367,8 +370,8 @@ func TestRoutingTableBucketDistribution(t *testing.T) {
 }
 
 func TestRoutingTableBucketCapacity(t *testing.T) {
-	me := createRandomTriple()
-	rt := NewRoutingTable(me)
+	Me := createRandomTriple()
+	rt := NewRoutingTable(Me)
 
 	// Try to add more contacts to a single bucket than its capacity
 	// We'll use contacts with IDs that hash to the same bucket
@@ -381,11 +384,11 @@ func TestRoutingTableBucketCapacity(t *testing.T) {
 
 		// Ensure they go to the same bucket by manipulating the distance
 		// This is a simplification - in practice, you'd need more sophisticated ID generation
-		rt.addContact(contacts[i])
+		rt.AddContact(contacts[i])
 	}
 
 	// Check that no bucket exceeds capacity
-	for i, bucket := range rt.buckets {
+	for i, bucket := range rt.Buckets {
 		if bucket.Len() > BucketSize {
 			t.Errorf("Bucket %d has %d contacts, should not exceed %d", i, bucket.Len(), BucketSize)
 		}
@@ -393,16 +396,16 @@ func TestRoutingTableBucketCapacity(t *testing.T) {
 }
 
 func TestRoutingTableIntegrationWithBucket(t *testing.T) {
-	me := createRandomTriple()
-	rt := NewRoutingTable(me)
+	Me := createRandomTriple()
+	rt := NewRoutingTable(Me)
 
 	// Add, remove, and re-add contacts to test integration
 	contact1 := createRandomTriple()
 	contact2 := createRandomTriple()
 
 	// Add contacts
-	rt.addContact(contact1)
-	rt.addContact(contact2)
+	rt.AddContact(contact1)
+	rt.AddContact(contact2)
 
 	// Get K closest and verify they're included
 	closest := rt.getKClosest("test_key", 10)
@@ -439,7 +442,7 @@ func TestRoutingTableIntegrationWithBucket(t *testing.T) {
 	}
 
 	// Re-add and verify it's back
-	rt.addContact(contact1)
+	rt.AddContact(contact1)
 	closest = rt.getKClosest("test_key", 10)
 
 	found1 = false
@@ -482,8 +485,8 @@ func TestXorDistanceFunctionForRouting(t *testing.T) {
 }
 
 func TestRoutingTableStressTest(t *testing.T) {
-	me := createRandomTriple()
-	rt := NewRoutingTable(me)
+	Me := createRandomTriple()
+	rt := NewRoutingTable(Me)
 
 	// Add many contacts and verify table remains consistent
 	numContacts := 1000
@@ -491,7 +494,7 @@ func TestRoutingTableStressTest(t *testing.T) {
 
 	for i := 0; i < numContacts; i++ {
 		contacts[i] = createRandomTriple()
-		rt.addContact(contacts[i])
+		rt.AddContact(contacts[i])
 	}
 
 	// Verify we can still get K closest without errors
@@ -515,11 +518,11 @@ func TestRoutingTableStressTest(t *testing.T) {
 
 	// Count total contacts stored
 	totalStored := 0
-	for _, bucket := range rt.buckets {
+	for _, bucket := range rt.Buckets {
 		totalStored += bucket.Len()
 	}
 
-	t.Logf("Stored %d out of %d contacts across %d buckets", totalStored, numContacts, len(rt.buckets))
+	t.Logf("Stored %d out of %d contacts across %d Buckets", totalStored, numContacts, len(rt.Buckets))
 
 	// Should have stored some contacts (exact number depends on distribution)
 	if totalStored == 0 {

@@ -1,9 +1,12 @@
-package main
+package node_test
 
 import (
 	"bytes"
 	"crypto/rand"
 	"testing"
+
+	. "github.com/eislab-cps/go-template/internal/node"
+	. "github.com/eislab-cps/go-template/pkg/kademlia"
 )
 
 // Helper function to create a random Triple for testing
@@ -18,7 +21,7 @@ func createRandomTriple() Triple {
 }
 
 func TestBucketLRUOrdering(t *testing.T) {
-	bucket := newBucket()
+	bucket := NewBucket()
 
 	// Add contacts
 	contact1 := createTripleWithID([]byte{1})
@@ -61,10 +64,10 @@ func createTripleWithID(id []byte) Triple {
 }
 
 func TestNewBucket(t *testing.T) {
-	bucket := newBucket()
+	bucket := NewBucket()
 
 	if bucket == nil {
-		t.Fatal("newBucket() returned nil")
+		t.Fatal("NewBucket() returned nil")
 	}
 
 	if bucket.Len() != 0 {
@@ -77,7 +80,7 @@ func TestNewBucket(t *testing.T) {
 }
 
 func TestBucketAddContact(t *testing.T) {
-	bucket := newBucket()
+	bucket := NewBucket()
 	triple := createRandomTriple()
 
 	// Test adding new contact
@@ -105,7 +108,7 @@ func TestBucketAddContact(t *testing.T) {
 }
 
 func TestBucketAddContactOrder(t *testing.T) {
-	bucket := newBucket()
+	bucket := NewBucket()
 	triple1 := createRandomTriple()
 	triple2 := createRandomTriple()
 
@@ -125,7 +128,7 @@ func TestBucketAddContactOrder(t *testing.T) {
 }
 
 func TestBucketAddContactToFull(t *testing.T) {
-	bucket := newBucket()
+	bucket := NewBucket()
 
 	// Fill the bucket to capacity
 	contacts := make([]Triple, BucketSize)
@@ -165,7 +168,7 @@ func TestBucketAddContactToFull(t *testing.T) {
 }
 
 func TestBucketAddExistingContactToFull(t *testing.T) {
-	bucket := newBucket()
+	bucket := NewBucket()
 
 	// Fill the bucket to capacity
 	contacts := make([]Triple, BucketSize)
@@ -189,7 +192,7 @@ func TestBucketAddExistingContactToFull(t *testing.T) {
 }
 
 func TestBucketRemoveContact(t *testing.T) {
-	bucket := newBucket()
+	bucket := NewBucket()
 	triple1 := createRandomTriple()
 	triple2 := createRandomTriple()
 
@@ -217,7 +220,7 @@ func TestBucketRemoveContact(t *testing.T) {
 }
 
 func TestBucketRemoveNonExistentContact(t *testing.T) {
-	bucket := newBucket()
+	bucket := NewBucket()
 	triple1 := createRandomTriple()
 	triple2 := createRandomTriple()
 
@@ -236,7 +239,7 @@ func TestBucketRemoveNonExistentContact(t *testing.T) {
 }
 
 func TestBucketRemoveFromEmpty(t *testing.T) {
-	bucket := newBucket()
+	bucket := NewBucket()
 	triple := createRandomTriple()
 
 	// Try to remove from empty bucket
@@ -248,7 +251,7 @@ func TestBucketRemoveFromEmpty(t *testing.T) {
 }
 
 func TestBucketContains(t *testing.T) {
-	bucket := newBucket()
+	bucket := NewBucket()
 	triple1 := createRandomTriple()
 	triple2 := createRandomTriple()
 
@@ -270,7 +273,7 @@ func TestBucketContains(t *testing.T) {
 }
 
 func TestBucketGetFirst(t *testing.T) {
-	bucket := newBucket()
+	bucket := NewBucket()
 
 	// Test empty bucket
 	first := bucket.GetFirst()
@@ -297,7 +300,7 @@ func TestBucketGetFirst(t *testing.T) {
 }
 
 func TestBucketGetFirstSingleContact(t *testing.T) {
-	bucket := newBucket()
+	bucket := NewBucket()
 	triple := createRandomTriple()
 
 	bucket.AddContact(triple)
@@ -313,7 +316,7 @@ func TestBucketGetFirstSingleContact(t *testing.T) {
 }
 
 func TestBucketGetAllContacts(t *testing.T) {
-	bucket := newBucket()
+	bucket := NewBucket()
 	triple1 := createRandomTriple()
 	triple2 := createRandomTriple()
 
@@ -344,7 +347,7 @@ func TestBucketGetAllContacts(t *testing.T) {
 }
 
 func TestBucketGetAllContactsEmpty(t *testing.T) {
-	bucket := newBucket()
+	bucket := NewBucket()
 
 	contacts := bucket.GetAllContacts()
 
@@ -354,7 +357,7 @@ func TestBucketGetAllContactsEmpty(t *testing.T) {
 }
 
 func TestBucketLen(t *testing.T) {
-	bucket := newBucket()
+	bucket := NewBucket()
 
 	// Test empty bucket
 	if bucket.Len() != 0 {
@@ -373,7 +376,7 @@ func TestBucketLen(t *testing.T) {
 }
 
 func TestBucketIsFull(t *testing.T) {
-	bucket := newBucket()
+	bucket := NewBucket()
 
 	// Test empty bucket
 	if bucket.IsFull() {
@@ -400,7 +403,7 @@ func TestBucketIsFull(t *testing.T) {
 }
 
 func TestBucketLRUBehavior(t *testing.T) {
-	bucket := newBucket()
+	bucket := NewBucket()
 
 	// Add 3 contacts
 	triple1 := createRandomTriple()

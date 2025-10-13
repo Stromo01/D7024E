@@ -10,6 +10,7 @@ import (
 
 func (node *Node) handleStore(msg Message) error {
 	parts := strings.SplitN(string(msg.Payload), ":", 2)
+	fmt.Printf("Storing %s", parts)
 	if len(parts) == 2 {
 		key := parts[0]
 		value := []byte(parts[1])

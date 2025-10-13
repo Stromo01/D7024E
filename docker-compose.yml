@@ -21,6 +21,7 @@ services:
     environment:
       - NODE_PORT=8001
       - BOOTSTRAP_ADDR=bootstrap:8000
+      - ADVERTISE_HOST=node
     depends_on:
       - bootstrap
     networks:

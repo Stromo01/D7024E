@@ -294,7 +294,6 @@ func (n *Node) Send(to Address, msgType string, data []byte) error {
 		Payload:     data,
 		Network:     n.network,
 	}
-
 	return n.connection.Send(msg)
 }
 

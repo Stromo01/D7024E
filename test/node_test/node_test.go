@@ -170,7 +170,8 @@ func TestNodeGetAllContacts(t *testing.T) {
 			Addr: contactNode.Address(),
 			Port: contactNode.Address().Port,
 		},
-		Payload: []byte(MsgPing + ":ping"),
+		Type:    MsgPing,        // Set Type field
+		Payload: []byte("ping"), // Just the data, not "ping:ping"
 		Network: network,
 	}
 

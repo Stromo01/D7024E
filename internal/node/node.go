@@ -14,9 +14,6 @@ import (
 	. "github.com/eislab-cps/go-template/pkg/kademlia"
 )
 
-// XOR distance between two keys (as hex strings)
-// Removed duplicate definition of xorDistance
-
 type Node struct {
 	Id         [20]byte // 160 bits
 	Addr       Address
@@ -30,6 +27,10 @@ type Node struct {
 	closeMu    sync.RWMutex
 	pending    map[[20]byte]chan Message
 	pendingMu  sync.Mutex
+
+	messageWG     sync.WaitGroup // Tracks active message handlers
+	maxConcurrent int            // Maximum concurrent handlers
+	semaphore     chan struct{}  // Semaphore to limit concurrency
 }
 
 const K = 8     // Kademlia bucket size and number of closest nodes to return
@@ -85,7 +86,6 @@ func NewNode(network Network, addr Address) (*Node, error) {
 	}
 
 	actualAddr := AddressFromNetAddr(connection.LocalAddr())
-
 	advertiseAddr := addr
 	if addr.IP == "" || addr.IP == "0.0.0.0" {
 		advertiseAddr = actualAddr
@@ -95,15 +95,20 @@ func NewNode(network Network, addr Address) (*Node, error) {
 	if _, err := rand.Read(id[:]); err != nil {
 		return nil, fmt.Errorf("failed to generate node ID: %v", err)
 	}
+
+	maxConcurrent := 10 // Maximum concurrent handlers
+
 	node := &Node{
-		Id:         id,
-		Addr:       advertiseAddr,
-		network:    network,
-		connection: connection,
-		handlers:   make(map[string]MessageHandler),
-		routing:    NewRoutingTable(Triple{ID: id[:], Addr: advertiseAddr, Port: advertiseAddr.Port}),
-		store:      make(map[string][]byte),
-		pending:    make(map[[20]byte]chan Message),
+		Id:            id,
+		Addr:          advertiseAddr,
+		network:       network,
+		connection:    connection,
+		handlers:      make(map[string]MessageHandler),
+		routing:       NewRoutingTable(Triple{ID: id[:], Addr: advertiseAddr, Port: advertiseAddr.Port}),
+		store:         make(map[string][]byte),
+		pending:       make(map[[20]byte]chan Message),
+		maxConcurrent: maxConcurrent,
+		semaphore:     make(chan struct{}, maxConcurrent),
 	}
 
 	node.registerHandlers() // Register all message handlers
@@ -238,7 +243,7 @@ func (n *Node) Start() {
 		}
 		n.closeMu.RUnlock()
 
-		// blocking receive
+		// Blocking receive
 		msg, err := n.connection.Recv()
 		if err != nil {
 			n.closeMu.RLock()
@@ -246,41 +251,76 @@ func (n *Node) Start() {
 				log.Printf("Node %s failed to receive message: %v", n.Addr.String(), err)
 			}
 			n.closeMu.RUnlock()
-			return
+			break
 		}
 
-		// deliver to waiter if present (correlate by message ID)
-		n.pendingMu.Lock()
-		if ch, ok := n.pending[msg.ID]; ok {
-			// deliver without blocking if receiver not ready
-			select {
-			case ch <- msg:
-			default:
-			}
-			delete(n.pending, msg.ID)
-			n.pendingMu.Unlock()
-			continue
+		n.handleMessageConcurrently(msg)
+	}
+	log.Println("Waiting for active message handlers to finish...")
+	n.messageWG.Wait()
+	log.Println("Node closed successfully")
+}
+
+func (n *Node) handleMessageConcurrently(msg Message) {
+	// Try to acquire semaphore (non-blocking)
+	select {
+	case n.semaphore <- struct{}{}: // Acquired semaphore
+		// Add to WaitGroup before starting goroutine
+		n.messageWG.Add(1)
+
+		// Handle message in separate goroutine
+		go func(message Message) {
+			defer func() {
+				// Release semaphore and mark as done
+				<-n.semaphore
+				n.messageWG.Done()
+			}()
+
+			// Handle the message
+			n.handleMessage(message)
+		}(msg)
+
+	default:
+		// All handlers busy, handle synchronously to prevent blocking
+		log.Printf("All %d handlers busy, handling message synchronously", n.maxConcurrent)
+		n.handleMessage(msg)
+	}
+}
+
+func (n *Node) handleMessage(msg Message) {
+	// Check if this is a pending correlation response
+	n.pendingMu.Lock()
+	if ch, ok := n.pending[msg.ID]; ok {
+		select {
+		case ch <- msg:
+		default:
 		}
+		delete(n.pending, msg.ID)
 		n.pendingMu.Unlock()
+		return
+	}
+	n.pendingMu.Unlock()
 
-		msgType := msg.Type
+	msgType := msg.Type
+	if msgType == "" {
+		msgType = "default"
+	}
 
-		// dispatch to handler
-		n.mu.RLock()
-		handler, exists := n.handlers[msgType]
-		if !exists {
-			handler, exists = n.handlers["default"]
+	// Get handler (thread-safe read)
+	n.mu.RLock()
+	handler, exists := n.handlers[msgType]
+	if !exists {
+		handler, exists = n.handlers["default"]
+	}
+	n.mu.RUnlock()
+
+	// Execute handler
+	if exists && handler != nil {
+		if err := handler(msg); err != nil {
+			log.Printf("Handler error from %s: %v", msg.From.String(), err)
 		}
-		n.mu.RUnlock()
-
-		if exists && handler != nil {
-			if err := handler(msg); err != nil {
-				log.Printf("handler error from %s: %v", msg.From.String(), err)
-			}
-		} else {
-			// no handler found, ignore or log
-			log.Printf("no handler for msg type %q from %s", msgType, msg.From.String())
-		}
+	} else {
+		log.Printf("No handler for msg type %q from %s", msgType, msg.From.String())
 	}
 }
 
@@ -298,12 +338,23 @@ func (n *Node) Send(to Address, msgType string, data []byte) error {
 	return n.connection.Send(msg)
 }
 
-// Close shuts down the node
 func (n *Node) Close() error {
+	log.Println("Closing node...")
+
+	// Set closed flag to stop receiving new messages
 	n.closeMu.Lock()
 	n.closed = true
 	n.closeMu.Unlock()
-	return n.connection.Close()
+
+	// Close connection to interrupt Recv()
+	err := n.connection.Close()
+
+	// Wait for all active message handlers to complete
+	log.Println("Waiting for active message handlers to finish...")
+	n.messageWG.Wait()
+	log.Println("Node closed successfully")
+
+	return err
 }
 
 // Address returns the node's address

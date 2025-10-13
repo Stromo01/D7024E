@@ -1,8 +1,23 @@
-# Docker Instructions
-docker build . -t kadlab:latest  
-docker compose up --scale kademliaNode=50 -d   (number of nodes)  
-docker compose ps                               (Check running)
-go test -cover ./...                            (Test coverage)
+
+go test -cover ./...
+
+docker-compose up --build -d bootstrap
+
+docker-compose up -d --scale node=49 node
+
+
+
+# Run commands on node
+
+First, find your running containers
+docker ps
+
+Look for container names like:
+d7024e-bootstrap-1 or d7024e_bootstrap_1
+
+Then attach directly to the main process 
+docker attach d7024e-bootstrap-1
+
 
 # Go Project Template
 
@@ -130,7 +145,7 @@ To customize the project name, follow these steps:
 1. Create a new Git repo.
 
 2. **Edit `go.mod`** 
-   Change the module path from: `module github.com/Stromo01/D7024E` to your new project path.
+   Change the module path from: `module github.com/eislab-cps/go-template` to your new project path.
 
 3. **Update Import Paths**  
 Modify the import paths in the following files:
@@ -138,23 +153,23 @@ Modify the import paths in the following files:
 - `internal/cli/version.go`  
   Line 6:
   ```go
-  "github.com/Stromo01/D7024E/pkg/build"
+  "github.com/eislab-cps/go-template/pkg/build"
   ```
 
 - `internal/cli/talk.go`  
   Line 4:
   ```go
-  "github.com/Stromo01/D7024E/pkg/helloworld"
+  "github.com/eislab-cps/go-template/pkg/helloworld"
   ```
 
 - `cmd/main.go`  
   Lines 4–5:
   ```go
-  "github.com/Stromo01/D7024E/internal/cli"
-  "github.com/Stromo01/D7024E/pkg/build"
+  "github.com/eislab-cps/go-template/internal/cli"
+  "github.com/eislab-cps/go-template/pkg/build"
   ```
 
-Replace each instance of `github.com/Stromo01/D7024E` with your new module name.
+Replace each instance of `github.com/eislab-cps/go-template` with your new module name.
 
 4. Update Goreleaser
 Change the `binary` name to `helloworld` in the `.goreleaser.yml` file.
@@ -184,10 +199,10 @@ Take a look at these configuration files for CI/CD setup:
 **Note:**  
 The Goreleaser workflow can be used to automatically build and publish binaries on GitHub.  
 Click the **Draft a new release** button to create a new release.  
-Published releases will appear here: [GitHub Releases - Stromo01/D7024E](https://github.com/Stromo01/D7024E/releases)
+Published releases will appear here: [GitHub Releases - go-template](https://github.com/eislab-cps/go-template/releases)
 
 The Docker workflow will automatically build and publish a Docker image on GitHub.  
-See this page: [GitHub Packages - Stromo01/D7024E](https://github.com/Stromo01/D7024E/pkgs/container/Stromo01/D7024E)
+See this page: [GitHub Packages - go-template](https://github.com/eislab-cps/go-template/pkgs/container/go-template)
 
 ## Other tips
 - Run `go mod tidy` to clean up and verify dependencies.

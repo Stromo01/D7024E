@@ -15,7 +15,7 @@ func HandleGet(hash string) {
 	}); ok {
 		data, triple, found := node.FindObject(hash)
 		if found {
-			fmt.Printf("Data: %s\nTriple: %s\n", string(data), triple)
+			fmt.Printf("Data: %s\nTriple: %s\n", string(data), triple) //TODO: Use triple struct?
 		} else {
 			fmt.Println("Error: Data not found")
 		}

@@ -29,7 +29,7 @@ func NewRoutingTable(Me Triple) *RoutingTable {
 	return rt
 }
 
-func (rt *RoutingTable) GetKClosest(key string, K int) []Triple {
+func (rt *RoutingTable) getKClosest(key string, K int) []Triple {
 	keyBytes := []byte(key)
 	type distTriple struct {
 		dist    *big.Int

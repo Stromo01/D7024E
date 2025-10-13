@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log"
 	"math/big"
-	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -101,114 +100,16 @@ func NewNode(network Network, addr Address) (*Node, error) {
 		pending:    make(map[[20]byte]chan Message),
 	}
 
-	// Register STORE handler to accept and store objects
-	node.Handle("store", func(msg Message) error {
-		parts := strings.SplitN(string(msg.Payload), ":", 2)
-		if len(parts) == 2 {
-			key := parts[0]
-			value := []byte(parts[1])
-
-			node.StoreObject(key, value)
-			fmt.Printf("Node %s stored object with key %s from %s\n",
-				node.Address().String(), key, msg.From.String())
-
-			// Add the sender to routing table
-			if len(msg.FromContact.ID) > 0 {
-				node.routing.AddContact(msg.FromContact)
-			}
-		}
-		return nil
-	})
-
-	// Register PING handler to add sender to contacts and reply with PONG
-	node.Handle(MsgPing, func(msg Message) error {
-		fmt.Printf("Node %s received PING from %s (ID: %x)\n",
-			node.Address().String(),
-			msg.From.String(),
-			msg.FromContact.ID)
-
-		// Use the address from FromContact, not msg.From
-		contactToAdd := Triple{
-			ID:   msg.FromContact.ID,
-			Addr: msg.FromContact.Addr, // Use this instead of msg.From
-			Port: msg.FromContact.Port,
-		}
-
-		node.routing.AddContact(contactToAdd)
-		return node.Send(msg.FromContact.Addr, MsgPong, []byte("pong"))
-	})
-
-	// Update your PONG handler similarly
-	node.Handle(MsgPong, func(msg Message) error {
-		fmt.Printf("Node %s received PONG from %s (ID: %x)\n",
-			node.Address().String(),
-			msg.From.String(),
-			msg.FromContact.ID)
-
-		contactToAdd := Triple{
-			ID:   msg.FromContact.ID,
-			Addr: msg.FromContact.Addr,
-			Port: msg.FromContact.Port,
-		}
-
-		node.routing.AddContact(contactToAdd)
-		return nil
-	})
-
-	node.Handle("find_node", func(msg Message) error {
-		// Expect payload as "key"
-		key := string(msg.Payload)
-		closest := node.routing.GetKClosest(key, K)
-		var respPayload = tripleSerialize(closest)
-		return node.Send(msg.From, "find_node_response", []byte(respPayload))
-	})
-
-	node.Handle("find_node_response", func(msg Message) error {
-		// Expect payload as "addr1:port1:id1,addr2:port2:id2,..."
-		payload := string(msg.Payload)
-		if payload != "" {
-			triples, err := tripleDeserialize(payload)
-			if err != nil {
-				return fmt.Errorf("invalid find_node_response payload: %v", err)
-			}
-			for _, t := range triples {
-				node.routing.AddContact(t)
-			}
-		}
-		return nil
-	})
-
-	node.Handle("find_value", func(msg Message) error {
-		key := string(msg.Payload)
-
-		// Add the sender to routing table
-		if len(msg.FromContact.ID) > 0 {
-			node.routing.AddContact(msg.FromContact)
-		}
-
-		// Check if we have the value
-		if val, ok := node.FindObjectLocally(key); ok {
-			return node.Send(msg.From, "find_value_response", []byte("VALUE:"+string(val)))
-		} else {
-			// Return closest nodes
-			closest := node.routing.GetKClosest(key, K)
-			respPayload := tripleSerialize(closest)
-			return node.Send(msg.From, "find_value_response", []byte(respPayload))
-		}
-	})
+	node.registerHandlers() // Register all message handlers
 	return node, nil
 }
-
-func (n *Node) sortByDistance(key string, nodes []Triple) []Triple {
-	keyBytes := []byte(key)
-
-	sort.Slice(nodes, func(i, j int) bool {
-		distI := XorDistance(keyBytes, nodes[i].ID)
-		distJ := XorDistance(keyBytes, nodes[j].ID)
-		return distI.Cmp(distJ) < 0
-	})
-
-	return nodes
+func (n *Node) registerHandlers() {
+	n.Handle("store", n.handleStore)
+	n.Handle(MsgPing, n.handlePing)
+	n.Handle(MsgPong, n.handlePong)
+	n.Handle("find_node", n.handleFindNode)
+	n.Handle("find_node_response", n.handleFindNodeResponse)
+	n.Handle("find_value", n.handleFindValue)
 }
 
 func (n *Node) GetAllContacts() []Triple {

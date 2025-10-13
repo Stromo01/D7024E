@@ -63,6 +63,7 @@ func (n *Node) FindObject(key string) ([]byte, string, bool) {
 	if value, found := n.FindObjectLocally(key); found {
 		return value, n.Addr.String(), true
 	}
+	fmt.Print("Object not found locally")
 
 	// Use iterative find value for network lookup
 	if value, found := n.iterativeFindValue(key); found {

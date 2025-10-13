@@ -16,7 +16,7 @@ func init() {
 }
 
 var rootCmd = &cobra.Command{
-	Use:   "kademlia", // Changed from "helloworld"
+	Use:   "kademlia",
 	Short: "Kademlia DHT implementation",
 	Long:  "A Kademlia Distributed Hash Table implementation",
 }

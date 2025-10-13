@@ -1,5 +1,5 @@
 package cli
-
+/*
 import (
 	"bufio"
 	"crypto/sha1"
@@ -86,3 +86,4 @@ func startSimulatedNode() {
 		}
 	}
 }
+*/

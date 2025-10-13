@@ -29,7 +29,13 @@ func (n *Node) IterativeStore(key string, value []byte) {
 		fmt.Printf("%s ", node.Addr.String())
 	}
 	for _, node := range nodes {
-		n.Send(node.Addr, "store", value)
+		payload := fmt.Sprintf("%s:%s", key, string(value))
+		err := n.Send(node.Addr, "store", []byte(payload))
+		if err != nil {
+			fmt.Printf("Failed to store at %s: %v\n", node.Addr.String(), err)
+		} else {
+			fmt.Printf("Successfully sent store request to %s\n", node.Addr.String())
+		}
 	}
 }
 
@@ -40,7 +46,7 @@ func (n *Node) nodeLookup(key string, findValue ...bool) ([]Triple, []byte, bool
 	queried := make(map[string]bool)
 
 	for {
-		fmt.Printf("Shortlist: \n")
+		fmt.Printf("New iteration of nodeLookup.Shortlist: \n")
 		for _, node := range shortlist {
 			fmt.Printf(node.String() + "\n")
 		}

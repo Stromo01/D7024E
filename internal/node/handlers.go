@@ -18,11 +18,6 @@ func (node *Node) handleStore(msg Message) error {
 		node.StoreObject(key, value)
 		fmt.Printf("Node %s stored object with key %s from %s\n",
 			node.Address().String(), key, msg.From.String())
-
-		// Add the sender to routing table
-		if len(msg.FromContact.ID) > 0 {
-			node.routing.AddContact(msg.FromContact)
-		}
 	}
 	return nil
 }

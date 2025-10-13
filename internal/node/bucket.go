@@ -124,3 +124,23 @@ func (b *Bucket) IsFull() bool {
 	defer b.mu.RUnlock()
 	return len(b.List) >= K
 }
+
+// GetLeastRecentlyUsed returns the contact that should be evicted
+func (b *Bucket) GetLeastRecentlyUsed() *Triple {
+	return b.GetLast()
+}
+
+// MoveToFront moves an existing contact to the front (most recent position)
+func (b *Bucket) MoveToFront(triple Triple) bool {
+	for i, t := range b.List {
+		if bytes.Equal(t.ID, triple.ID) {
+			// Remove from current position
+			contact := b.List[i]
+			b.List = append(b.List[:i], b.List[i+1:]...)
+			// Add to front
+			b.List = append([]*Triple{contact}, b.List...)
+			return true
+		}
+	}
+	return false // Contact not found
+}

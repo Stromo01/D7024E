@@ -2,12 +2,9 @@ package node
 
 import (
 	"crypto/rand"
-	"encoding/hex"
 	"fmt"
 	"log"
 	"math/big"
-	"strconv"
-	"strings"
 	"sync"
 	"time"
 
@@ -36,45 +33,6 @@ type Node struct {
 
 const K = 8     // Kademlia bucket size and number of closest nodes to return
 const Alpha = 3 // Concurrency in lookups
-
-// XOR distance between two keys (as hex strings)
-func XorDistance(a, b []byte) *big.Int {
-	aInt := new(big.Int).SetBytes(a)
-	bInt := new(big.Int).SetBytes(b)
-	return new(big.Int).Xor(aInt, bInt)
-}
-
-// StoreObject stores a value by key (hash)
-func (n *Node) StoreObject(key string, value []byte) {
-	n.mu.Lock()
-	defer n.mu.Unlock()
-	n.store[key] = value
-}
-
-// FindObject retrieves a value by key (hash)
-func (n *Node) FindObjectLocally(key string) ([]byte, bool) {
-	n.mu.RLock()
-	defer n.mu.RUnlock()
-	val, ok := n.store[key]
-	return val, ok
-}
-
-func (n *Node) FindObject(key string) ([]byte, string, bool) {
-	// First check locally
-	if value, found := n.FindObjectLocally(key); found {
-		return value, n.Addr.String(), true
-	}
-	fmt.Print("Object not found locally")
-
-	// Use iterative find value for network lookup
-	if value, found := n.iterativeFindValue(key); found {
-		return value, "network", true
-	}
-	fmt.Print("Object not found in network")
-	return nil, "", false
-}
-
-// MessageHandler is a function that processes incoming messages
 type MessageHandler func(msg Message) error
 
 // NewNode creates a new node that can both send and receive messages
@@ -112,9 +70,10 @@ func NewNode(network Network, addr Address) (*Node, error) {
 		semaphore:     make(chan struct{}, maxConcurrent),
 	}
 
-	node.registerHandlers() // Register all message handlers
+	node.registerHandlers()
 	return node, nil
 }
+
 func (n *Node) registerHandlers() {
 	n.Handle("store", n.handleStore)
 	n.Handle(MsgPing, n.handlePing)
@@ -125,77 +84,61 @@ func (n *Node) registerHandlers() {
 	n.Handle("find_value_response", n.handleFindValueResponse)
 }
 
+// XOR distance between two keys (as hex strings)
+func XorDistance(a, b []byte) *big.Int {
+	aInt := new(big.Int).SetBytes(a)
+	bInt := new(big.Int).SetBytes(b)
+	return new(big.Int).Xor(aInt, bInt)
+}
+
+// StoreObject stores a value by key (hash)
+func (n *Node) StoreObject(key string, value []byte) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	n.store[key] = value
+}
+
+// FindObject retrieves a value by key (hash)
+func (n *Node) FindObjectLocally(key string) ([]byte, bool) {
+	n.mu.RLock()
+	defer n.mu.RUnlock()
+	val, ok := n.store[key]
+	return val, ok
+}
+
+func (n *Node) FindObject(key string) ([]byte, string, bool) {
+	if value, found := n.FindObjectLocally(key); found { // First check locally
+		return value, n.Addr.String(), true
+	}
+	fmt.Print("Object not found locally")
+
+	if value, found := n.iterativeFindValue(key); found { // Use iterative find value for network lookup
+		return value, "network", true
+	}
+	fmt.Print("Object not found in network")
+	return nil, "", false
+}
+
 func (n *Node) GetAllContacts() []Triple {
 	var contacts []Triple
 	for _, bucket := range n.routing.Buckets {
-		if bucket != nil {
-			// Use GetAllContacts() method from bucket
+		if bucket != nil { // Use GetAllContacts() method from bucket
 			contacts = append(contacts, bucket.GetAllContacts()...)
 		}
 	}
 	return contacts
 }
 
-func tripleDeserialize(data string) ([]Triple, error) {
-	if data == "" {
-		return []Triple{}, nil
-	}
-
-	parts := strings.Split(data, ",")
-	var triples []Triple
-
-	for _, part := range parts {
-		components := strings.Split(part, ":")
-		if len(components) != 3 {
-			continue // Skip malformed entries
-		}
-
-		ip := components[0]
-		port, err := strconv.Atoi(components[1])
-		if err != nil {
-			continue // Skip malformed entries
-		}
-
-		id, err := hex.DecodeString(components[2])
-		if err != nil {
-			continue // Skip malformed entries
-		}
-
-		triple := Triple{
-			ID:   id,
-			Addr: Address{IP: ip, Port: port},
-			Port: port,
-		}
-		triples = append(triples, triple)
-	}
-
-	return triples, nil
-}
-
-func tripleSerialize(triples []Triple) string {
-	var parts []string
-	for _, triple := range triples {
-		part := fmt.Sprintf("%s:%d:%x",
-			triple.Addr.IP,
-			triple.Addr.Port,
-			triple.ID)
-		parts = append(parts, part)
-	}
-	return strings.Join(parts, ",")
-}
-
 // JoinNetwork: send PING to known node and add to contacts
 func (n *Node) JoinNetwork(bootstrapNode Triple) error {
 	fmt.Printf("Attempting to join network via %s\n", bootstrapNode.Addr.String())
 
-	// Send PING to bootstrap node
-	err := n.Send(bootstrapNode.Addr, MsgPing, []byte("ping"))
+	err := n.Send(bootstrapNode.Addr, MsgPing, []byte("ping")) // Send PING to bootstrap node
 	if err != nil {
 		return fmt.Errorf("failed to ping bootstrap node %s: %v", bootstrapNode.Addr.String(), err)
 	}
 
-	// Wait a moment for the PONG response
-	time.Sleep(100 * time.Millisecond)
+	time.Sleep(100 * time.Millisecond) // Wait a moment for the PONG response
 
 	// Send find_node for our own ID to populate routing table
 	err = n.Send(bootstrapNode.Addr, "find_node", []byte(fmt.Sprintf("%x", n.Id)))
@@ -203,8 +146,7 @@ func (n *Node) JoinNetwork(bootstrapNode Triple) error {
 		return fmt.Errorf("failed to send find_node to %s: %v", bootstrapNode.Addr.String(), err)
 	}
 
-	// Wait for responses
-	time.Sleep(100 * time.Millisecond)
+	time.Sleep(100 * time.Millisecond) // Wait for responses
 
 	// Send find_node for a random ID to discover more nodes
 	randomID := make([]byte, 20)
@@ -215,7 +157,6 @@ func (n *Node) JoinNetwork(bootstrapNode Triple) error {
 	if err != nil {
 		return fmt.Errorf("failed to send second find_node to %s: %v", bootstrapNode.Addr.String(), err)
 	}
-
 	return nil
 }
 
@@ -237,92 +178,15 @@ func (n *Node) Start() {
 	}
 
 	for {
-		// check closed flag
 		n.closeMu.RLock()
-		if n.closed {
+		if n.closed { // Is the node closed?
 			n.closeMu.RUnlock()
 			return
 		}
 		n.closeMu.RUnlock()
 
-		// Blocking receive
-		msg, err := n.connection.Recv()
-		if err != nil {
-			n.closeMu.RLock()
-			if !n.closed {
-				log.Printf("Node %s failed to receive message: %v", n.Addr.String(), err)
-			}
-			n.closeMu.RUnlock()
-			break
-		}
-
-		n.handleMessageConcurrently(msg)
-	}
-	log.Println("Waiting for active message handlers to finish...")
-	n.messageWG.Wait()
-	log.Println("Node closed successfully")
-}
-
-func (n *Node) handleMessageConcurrently(msg Message) {
-	// Try to acquire semaphore (non-blocking)
-	select {
-	case n.semaphore <- struct{}{}: // Acquired semaphore
-		// Add to WaitGroup before starting goroutine
-		n.messageWG.Add(1)
-
-		// Handle message in separate goroutine
-		go func(message Message) {
-			defer func() {
-				// Release semaphore and mark as done
-				<-n.semaphore
-				n.messageWG.Done()
-			}()
-
-			// Handle the message
-			n.handleMessage(message)
-		}(msg)
-
-	default:
-		// All handlers busy, handle synchronously to prevent blocking
-		log.Printf("All %d handlers busy, handling message synchronously", n.maxConcurrent)
-		n.handleMessage(msg)
-	}
-}
-
-func (n *Node) handleMessage(msg Message) {
-	// Check if this is a pending correlation response
-	n.pendingMu.Lock()
-	if ch, ok := n.pending[msg.ID]; ok {
-		select {
-		case ch <- msg:
-		default:
-		}
-		delete(n.pending, msg.ID)
-		n.pendingMu.Unlock()
-		return
-	}
-	n.pendingMu.Unlock()
-
-	msgType := msg.Type
-	if msgType == "" {
-		msgType = "default"
-	}
-
-	// Get handler (thread-safe read)
-	n.mu.RLock()
-	handler, exists := n.handlers[msgType]
-	if !exists {
-		handler, exists = n.handlers["default"]
-	}
-	n.mu.RUnlock()
-
-	// Execute handler
-	if exists && handler != nil {
-		if err := handler(msg); err != nil {
-			log.Printf("Handler error from %s: %v", msg.From.String(), err)
-		}
-	} else {
-		log.Printf("No handler for msg type %q from %s", msgType, msg.From.String())
+		msg, _ := n.connection.Recv()
+		n.HandleMessageConcurrently(msg)
 	}
 }
 

@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"math/big"
 	"sort"
-	"sync"
 
 	. "github.com/eislab-cps/go-template/pkg/kademlia"
 )
@@ -16,7 +15,6 @@ const IDLength = 20
 type RoutingTable struct {
 	Me      Triple
 	Buckets [IDLength * 8]*Bucket
-	mu      sync.RWMutex
 }
 
 func NewRoutingTable(Me Triple) *RoutingTable {
@@ -32,10 +30,6 @@ func NewRoutingTable(Me Triple) *RoutingTable {
 }
 
 func (rt *RoutingTable) GetKClosest(key string, K int) []Triple {
-	// Acquire read lock for thread-safe access
-	rt.mu.RLock()
-	defer rt.mu.RUnlock()
-
 	keyBytes := []byte(key)
 	type distTriple struct {
 		dist    *big.Int
@@ -62,10 +56,6 @@ func (rt *RoutingTable) GetKClosest(key string, K int) []Triple {
 }
 
 func (rt *RoutingTable) AddContact(contact Triple) {
-	// Acquire write lock for thread-safe access
-	rt.mu.Lock()
-	defer rt.mu.Unlock()
-
 	fmt.Printf("Adding contact %s (ID: %x) to routing table\n", contact.Addr.String(), contact.ID)
 	if bytes.Equal(contact.ID, rt.Me.ID) {
 		return // Don't add ourselves

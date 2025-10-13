@@ -2,14 +2,12 @@ package node
 
 import (
 	"bytes"
-	"sync"
 
 	. "github.com/eislab-cps/go-template/pkg/kademlia"
 )
 
 type Bucket struct {
 	List []*Triple
-	mu   sync.RWMutex
 }
 
 // NewBucket creates a new bucket with an initial capacity defined by BucketSize.
@@ -23,10 +21,6 @@ func NewBucket() *Bucket {
 // or moves it to the front if it already existed
 // This maintains LRU order: [most recent ... least recent]
 func (b *Bucket) AddContact(triple Triple) {
-	// Lock the bucket for writing
-	b.mu.Lock()
-	defer b.mu.Unlock()
-
 	var index int = -1
 
 	// Find if the contact already exists
@@ -57,10 +51,6 @@ func (b *Bucket) AddContact(triple Triple) {
 
 // RemoveContact removes the Triple from the bucket
 func (b *Bucket) RemoveContact(triple Triple) {
-	// Lock the bucket for writing
-	b.mu.Lock()
-	defer b.mu.Unlock()
-
 	for i, t := range b.List {
 		if bytes.Equal(t.ID, triple.ID) {
 			// Remove element at index i
@@ -72,10 +62,6 @@ func (b *Bucket) RemoveContact(triple Triple) {
 
 // Contains checks if the bucket contains the given Triple
 func (b *Bucket) Contains(triple Triple) bool {
-	// Lock the bucket for reading
-	b.mu.RLock()
-	defer b.mu.RUnlock()
-
 	for _, t := range b.List {
 		if bytes.Equal(t.ID, triple.ID) {
 			return true
@@ -103,10 +89,6 @@ func (b *Bucket) GetLast() *Triple {
 // GetAllContacts returns all Triples in the bucket
 // Ordered from most recently seen to least recently seen
 func (b *Bucket) GetAllContacts() []Triple {
-	// Lock the bucket for reading
-	b.mu.RLock()
-	defer b.mu.RUnlock()
-
 	var contacts []Triple
 	for _, triple := range b.List {
 		contacts = append(contacts, *triple)

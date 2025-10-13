@@ -2,6 +2,7 @@ package node
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -86,6 +87,18 @@ func (n *Node) nodeLookup(key string, findValue ...bool) ([]Triple, []byte, bool
 	}
 
 	return shortlist, nil, false
+}
+
+func (n *Node) sortByDistance(key string, nodes []Triple) []Triple {
+	keyBytes := []byte(key)
+
+	sort.Slice(nodes, func(i, j int) bool {
+		distI := XorDistance(keyBytes, nodes[i].ID)
+		distJ := XorDistance(keyBytes, nodes[j].ID)
+		return distI.Cmp(distJ) < 0
+	})
+
+	return nodes
 }
 
 type queryResult struct {

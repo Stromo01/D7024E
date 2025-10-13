@@ -8,6 +8,8 @@ import (
 	"strings"
 )
 
+var currentNode interface{}
+
 func StartInteractiveCLI(node interface{}) {
 	currentNode = node
 	scanner := bufio.NewScanner(os.Stdin)
@@ -72,11 +74,11 @@ func handlePut(data string) {
 
 	hash := fmt.Sprintf("%x", sha1.Sum([]byte(data)))
 
-	if node, ok := currentNode.(interface{ iterativeStore(string, []byte) }); ok {
-		node.iterativeStore(hash, []byte(data))
+	if node, ok := currentNode.(interface{ IterativeStore(string, []byte) }); ok {
+		node.IterativeStore(hash, []byte(data))
 		fmt.Printf("%s\n", hash)
 	} else {
-		fmt.Println("Error: Node does not support iterativeStore method")
+		fmt.Println("Error: Node does not support IterativeStore method")
 	}
 }
 

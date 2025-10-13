@@ -578,8 +578,12 @@ func sortAndTrim(key string, nodes []Triple) []Triple {
 	return nodeDistance[:Alpha]
 }
 
-func (n *Node) iterativeStore(key string, value []byte) {
+func (n *Node) IterativeStore(key string, value []byte) {
 	var nodes []Triple = n.iterativeFindNode(key)
+	fmt.Printf("Storing key %s at nodes: ", key)
+	for _, node := range nodes {
+		fmt.Printf("%s ", node.Addr.String())
+	}
 	for _, node := range nodes {
 		n.Send(node.Addr, "store", value)
 	}

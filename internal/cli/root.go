@@ -8,7 +8,6 @@ import (
 )
 
 var Verbose bool
-var currentNode interface{}
 
 func init() {
 	rootCmd.PersistentFlags().BoolVarP(&Verbose, "verbose", "v", false, "verbose output")

@@ -34,7 +34,7 @@ type Node struct {
 	semaphore     chan struct{}  // Semaphore to limit concurrency
 }
 
-const K = 3     // Kademlia bucket size and number of closest nodes to return
+const K = 8     // Kademlia bucket size and number of closest nodes to return
 const Alpha = 3 // Concurrency in lookups
 
 // XOR distance between two keys (as hex strings)

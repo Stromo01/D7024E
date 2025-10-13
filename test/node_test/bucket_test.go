@@ -2,23 +2,11 @@ package node_test
 
 import (
 	"bytes"
-	"crypto/rand"
 	"testing"
 
 	. "github.com/eislab-cps/go-template/internal/node"
 	. "github.com/eislab-cps/go-template/pkg/kademlia"
 )
-
-// Helper function to create a random Triple for testing
-func createRandomTriple() Triple {
-	var id [20]byte
-	rand.Read(id[:])
-	return Triple{
-		ID:   id[:],
-		Addr: Address{IP: "127.0.0.1", Port: 8000},
-		Port: 8000,
-	}
-}
 
 func TestBucketLRUOrdering(t *testing.T) {
 	bucket := NewBucket()
@@ -51,15 +39,6 @@ func TestBucketLRUOrdering(t *testing.T) {
 	first = bucket.GetFirst()
 	if !bytes.Equal(first.ID, contact1.ID) {
 		t.Errorf("Expected contact1 to move to front")
-	}
-}
-
-// Helper function to create a Triple with specific ID
-func createTripleWithID(id []byte) Triple {
-	return Triple{
-		ID:   id,
-		Addr: Address{IP: "127.0.0.1", Port: 8000},
-		Port: 8000,
 	}
 }
 
@@ -365,7 +344,7 @@ func TestBucketLen(t *testing.T) {
 	}
 
 	// Add contacts and test length
-	for i := 1; i <= 5; i++ {
+	for i := 1; i <= K-1; i++ {
 		triple := createRandomTriple()
 		bucket.AddContact(triple)
 

@@ -136,7 +136,6 @@ func (n *UDPNetwork) Heal() {
 
 // Reply sends a response message back to the sender
 func (m Message) Reply(msgType string, data []byte) error {
-
 	// Create connection to sender
 	connection, err := m.Network.Dial(m.From)
 	if err != nil {
@@ -144,19 +143,19 @@ func (m Message) Reply(msgType string, data []byte) error {
 	}
 	defer connection.Close()
 
-	// Create reply message
+	// Create reply message with proper Type field
 	reply := Message{
 		From:    m.To,
 		To:      m.From,
+		Type:    msgType, // Set Type field
 		Payload: data,
-		Type:    msgType,
 		Network: m.Network,
 	}
 
 	return connection.Send(reply)
 }
 
-// ReplyString is a convenience method for sending string replies
+// Fix ReplyString method:
 func (m Message) ReplyString(msgType, data string) error {
 	return m.Reply(msgType, []byte(data))
 }

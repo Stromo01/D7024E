@@ -23,9 +23,7 @@ func NewRoutingTable(Me Triple) *RoutingTable {
 		Me: Me,
 	}
 	for i := range rt.Buckets {
-		rt.Buckets[i] = &Bucket{
-			List: make([]*Triple, 0, K),
-		}
+		rt.Buckets[i] = NewBucket()
 	}
 	return rt
 }
@@ -61,26 +59,22 @@ func (rt *RoutingTable) GetKClosest(key string, K int) []Triple {
 }
 
 func (rt *RoutingTable) AddContact(contact Triple) {
-	rt.mu.RLock() // Read lock for getting bucket
-	fmt.Printf("Adding contact %s (ID: %x) to routing table\n", contact.Addr.String(), contact.ID)
+	rt.mu.RLock()
 
 	if bytes.Equal(contact.ID, rt.Me.ID) {
+		rt.mu.RUnlock()
 		return // Don't add ourselves
 	}
-	for _, bucket := range rt.Buckets { //Dont add if it already exists
-		for _, c := range bucket.List {
-			if bytes.Equal(c.ID, contact.ID) {
-				return
-			}
-		}
-	}
-	fmt.Printf("Adding contact %s (ID: %x) to routing table\n", contact.Addr.String(), contact.ID)
+
+	// Check if contact already exists - FIX: Check each bucket properly
 	bucketIndex := rt.GetBucketIndex(contact.ID)
 	bucket := rt.Buckets[bucketIndex]
 	rt.mu.RUnlock()
 
-	// Bucket handles its own locking
+	// Let bucket handle the add (it will check duplicates internally)
 	bucket.AddContact(contact)
+	// Debug print
+	fmt.Printf("Adding contact %s (ID: %x) to routing table\n", contact.Addr.String(), contact.ID)
 }
 
 func (rt *RoutingTable) RemoveContact(contact Triple) {

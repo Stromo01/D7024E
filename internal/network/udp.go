@@ -20,9 +20,11 @@ type UDPConnection struct {
 
 // Send transmits a message through the UDP connection
 func (c *UDPConnection) Send(msg Message) error {
-	c.sendMu.Lock() // Serialize send operations
+	c.sendMu.Lock()
 	defer c.sendMu.Unlock()
+
 	wire, err := encodeWireMessage(WireMessage{
+		ID:          msg.ID,
 		FromContact: msg.FromContact,
 		Type:        msg.Type,
 		Payload:     msg.Payload,
@@ -66,6 +68,7 @@ func (c *UDPConnection) Recv() (Message, error) {
 		}
 		from := AddressFromNetAddr(c.conn.RemoteAddr())
 		return Message{
+			ID:          wire.ID,
 			From:        from,
 			FromContact: wire.FromContact,
 			To:          c.localAddr,
@@ -89,6 +92,7 @@ func (c *UDPConnection) Recv() (Message, error) {
 		Port: remoteAddr.Port,
 	}
 	return Message{
+		ID:          wire.ID,
 		From:        from,
 		FromContact: wire.FromContact,
 		To:          c.localAddr,

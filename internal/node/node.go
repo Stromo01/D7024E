@@ -249,3 +249,7 @@ func (n *Node) Close() error {
 func (n *Node) Address() Address {
 	return n.Addr
 }
+
+func (n *Node) RoutingTable() *RoutingTable {
+	return n.routing
+}

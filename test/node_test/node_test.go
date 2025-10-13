@@ -2,6 +2,7 @@ package node_test
 
 import (
 	"bytes"
+	"sync"
 	"testing"
 	"time"
 
@@ -79,6 +80,61 @@ func TestNodeStoreAndRetrieve(t *testing.T) {
 	}
 }
 
+type TestNetwork struct {
+	sentMessages map[string][]Message
+	mu           sync.RWMutex
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+func TestNodeIterativeStore(t *testing.T) {
+	// Use the same network as other tests
+	network := NewUDPNetwork()
+
+	// Create node
+	addr := Address{IP: "127.0.0.1", Port: 0}
+	node, err := NewNode(network, addr)
+	if err != nil {
+		t.Fatalf("Failed to create node: %v", err)
+	}
+	defer node.Close()
+
+	// Start the node
+	go node.Start()
+	time.Sleep(10 * time.Millisecond)
+
+	// Add some contacts to routing table
+	contacts := []Triple{
+		createTripleWithID([]byte{0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}),
+		createTripleWithID([]byte{0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}),
+		createTripleWithID([]byte{0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}),
+	}
+
+	// Add contacts to routing table
+	for _, contact := range contacts {
+		node.RoutingTable().AddContact(contact)
+	}
+
+	// Store some data
+	key := "test-key"
+	value := []byte("test-value")
+
+	// Call IterativeStore
+	node.IterativeStore(key, value)
+
+	// Simple verification: check that the function completes without crashing
+	closest := node.RoutingTable().GetKClosest(key, 3)
+	if len(closest) == 0 {
+		t.Error("Should have contacts in routing table after IterativeStore")
+	}
+
+	t.Logf("IterativeStore completed for key '%s'", key)
+}
+
 func TestNodeFindObject(t *testing.T) {
 	network := NewUDPNetwork()
 	addr := Address{IP: "127.0.0.1", Port: 0}
@@ -107,8 +163,6 @@ func TestNodeFindObject(t *testing.T) {
 	}
 }
 
-
-
 func TestXorDistance(t *testing.T) {
 	a := []byte{0x00}
 	b := []byte{0x01}
@@ -131,4 +185,3 @@ func TestXorDistance(t *testing.T) {
 		t.Error("Distance to self should be 0")
 	}
 }
-

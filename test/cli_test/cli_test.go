@@ -15,6 +15,11 @@ type MockNode struct {
 	storedData map[string][]byte
 }
 
+// Implement Close() error to satisfy interface
+func (m *MockNode) Close() error {
+	return nil
+}
+
 func (m *MockNode) IterativeStore(hash string, data []byte) {
 	if m.storedData == nil {
 		m.storedData = make(map[string][]byte)

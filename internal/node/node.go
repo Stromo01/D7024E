@@ -1,7 +1,6 @@
 package node
 
 import (
-	"bytes"
 	"crypto/rand"
 	"fmt"
 	"log"
@@ -259,12 +258,7 @@ func (n *Node) Start() {
 		n.pendingMu.Unlock()
 
 		// determine message type (assumes "TYPE:payload" convention)
-		msgType := "default"
-		if len(msg.Payload) > 0 {
-			if i := bytes.IndexByte(msg.Payload, ':'); i >= 0 {
-				msgType = string(msg.Payload[:i])
-			}
-		}
+		msgType := msg.Type
 
 		// dispatch to handler
 		n.mu.RLock()
@@ -285,28 +279,18 @@ func (n *Node) Start() {
 	}
 }
 
-// Send sends a message to the target address
 func (n *Node) Send(to Address, msgType string, data []byte) error {
-	// Format payload as "msgType:data"
-	var payload []byte
-	if msgType != "" {
-		payload = append([]byte(msgType+":"), data...)
-	} else {
-		payload = data
-	}
-
 	actualAddr := AddressFromNetAddr(n.connection.LocalAddr())
 
-	// Create the message with proper FromContact
 	msg := Message{
 		From:        actualAddr,
 		FromContact: Triple{ID: n.Id[:], Addr: actualAddr, Port: actualAddr.Port},
 		To:          to,
-		Payload:     payload,
+		Type:        msgType, // Use dedicated Type field
+		Payload:     data,    // Clean payload without prefix
 		Network:     n.network,
 	}
 
-	// Use the listening connection for sending (maintains source port)
 	return n.connection.Send(msg)
 }
 

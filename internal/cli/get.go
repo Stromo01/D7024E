@@ -5,12 +5,12 @@ import (
 )
 
 func HandleGet(hash string) {
-	if currentNode == nil {
+	if CurrentNode == nil {
 		fmt.Println("Error: No node available")
 		return
 	}
 
-	if node, ok := currentNode.(interface {
+	if node, ok := CurrentNode.(interface {
 		FindObject(string) ([]byte, string, bool)
 	}); ok {
 		data, triple, found := node.FindObject(hash)

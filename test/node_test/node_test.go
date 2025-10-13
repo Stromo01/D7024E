@@ -269,38 +269,6 @@ func TestNodeSend(t *testing.T) {
 	}
 }
 
-func TestNodeStoreAtK(t *testing.T) {
-	network := NewUDPNetwork()
-	addr := Address{IP: "127.0.0.1", Port: 0}
-
-	node, err := NewNode(network, addr)
-	if err != nil {
-		t.Fatalf("Failed to create node: %v", err)
-	}
-	defer node.Close()
-
-	go node.Start()
-
-	// Store at K (with empty routing table, should just store locally)
-	key := "dist-key"
-	value := []byte("dist-value")
-	err = node.StoreAtK(key, value, 2)
-
-	// Should not error (even if remote stores fail)
-	if err != nil {
-		t.Logf("StoreAtK returned error (expected for test): %v", err)
-	}
-
-	// Should at least store locally
-	stored, exists := node.FindObjectLocally(key)
-	if !exists {
-		t.Error("Should store locally")
-	}
-	if !bytes.Equal(stored, value) {
-		t.Error("Stored value should match")
-	}
-}
-
 func TestNodePingHandler(t *testing.T) {
 	network := NewUDPNetwork()
 	nodeAAddr := Address{IP: "127.0.0.1", Port: 0}

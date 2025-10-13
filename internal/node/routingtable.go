@@ -29,7 +29,7 @@ func NewRoutingTable(Me Triple) *RoutingTable {
 	return rt
 }
 
-func (rt *RoutingTable) getKClosest(key string, K int) []Triple {
+func (rt *RoutingTable) GetKClosest(key string, K int) []Triple {
 	keyBytes := []byte(key)
 	type distTriple struct {
 		dist    *big.Int
@@ -97,9 +97,3 @@ func (routingTable *RoutingTable) GetBucketIndex(nodeID []byte) int {
 	}
 	return index
 }
-
-/*
-func (rt *RoutingTable) insertContact(distance *big.Int, contact Triple) { //TODO: implement
-
-}
-*/

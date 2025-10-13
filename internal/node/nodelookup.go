@@ -34,7 +34,7 @@ func (n *Node) IterativeStore(key string, value []byte) {
 // NodeLookup
 func (n *Node) nodeLookup(key string, findValue ...bool) ([]Triple, []byte, bool) {
 	isValueSearch := len(findValue) > 0 && findValue[0]
-	shortlist := n.routing.getKClosest(key, K)
+	shortlist := n.routing.GetKClosest(key, K)
 	queried := make(map[string]bool)
 
 	for {

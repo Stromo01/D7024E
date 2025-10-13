@@ -158,7 +158,7 @@ func NewNode(network Network, addr Address) (*Node, error) {
 	node.Handle("find_node", func(msg Message) error {
 		// Expect payload as "key"
 		key := string(msg.Payload)
-		closest := node.routing.getKClosest(key, K)
+		closest := node.routing.GetKClosest(key, K)
 		var respPayload = tripleSerialize(closest)
 		return node.Send(msg.From, "find_node_response", []byte(respPayload))
 	})
@@ -191,7 +191,7 @@ func NewNode(network Network, addr Address) (*Node, error) {
 			return node.Send(msg.From, "find_value_response", []byte("VALUE:"+string(val)))
 		} else {
 			// Return closest nodes
-			closest := node.routing.getKClosest(key, K)
+			closest := node.routing.GetKClosest(key, K)
 			respPayload := tripleSerialize(closest)
 			return node.Send(msg.From, "find_value_response", []byte(respPayload))
 		}

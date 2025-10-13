@@ -365,7 +365,7 @@ func TestBucketLen(t *testing.T) {
 	}
 
 	// Add contacts and test length
-	for i := 1; i <= 5; i++ {
+	for i := 1; i <= K-1; i++ {
 		triple := createRandomTriple()
 		bucket.AddContact(triple)
 

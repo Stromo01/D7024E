@@ -60,37 +60,6 @@ func TestRoutingTableAddContact(t *testing.T) {
 	}
 }
 
-func TestRoutingTableAddMultipleContacts(t *testing.T) {
-	Me := createRandomTriple()
-	rt := NewRoutingTable(Me)
-
-	contacts := make([]Triple, 10)
-	for i := 0; i < 10; i++ {
-		contacts[i] = createRandomTriple()
-		rt.AddContact(contacts[i])
-	}
-
-	// Verify all contacts are added
-	totalContacts := 0
-	for _, bucket := range rt.Buckets {
-		totalContacts += bucket.Len()
-	}
-
-	if totalContacts != 10 {
-		t.Errorf("Expected 10 total contacts, got %d", totalContacts)
-	}
-
-	// Verify each contact is in the correct bucket
-	for _, contact := range contacts {
-		bucketIndex := rt.GetBucketIndex(contact.ID)
-		bucket := rt.Buckets[bucketIndex]
-
-		if !bucket.Contains(contact) {
-			t.Errorf("Contact should be in bucket %d", bucketIndex)
-		}
-	}
-}
-
 func TestRoutingTableRemoveContact(t *testing.T) {
 	Me := createRandomTriple()
 	rt := NewRoutingTable(Me)

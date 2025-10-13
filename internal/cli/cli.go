@@ -9,7 +9,7 @@ import (
 
 var CurrentNode interface{}
 
-func StartInteractiveCLI(node interface{}) {
+func StartInteractiveCLI(node interface{ Close() error }) {
 	CurrentNode = node
 	scanner := bufio.NewScanner(os.Stdin)
 
@@ -34,6 +34,7 @@ func StartInteractiveCLI(node interface{}) {
 		switch command {
 		case "exit", "quit":
 			fmt.Println("Goodbye!")
+			node.Close()
 			return
 		case "help":
 			ShowHelp()

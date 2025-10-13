@@ -286,11 +286,9 @@ func (n *Node) Start() {
 
 // Send sends a message to the target address
 func (n *Node) Send(to Address, msgType string, data []byte) error {
-	actualAddr := AddressFromNetAddr(n.connection.LocalAddr())
-
 	msg := Message{
-		From:        actualAddr,
-		FromContact: Triple{ID: n.Id[:], Addr: actualAddr, Port: actualAddr.Port},
+		From:        n.Addr,
+		FromContact: Triple{ID: n.Id[:], Addr: n.Addr, Port: n.Addr.Port},
 		To:          to,
 		Type:        msgType,
 		Payload:     data,

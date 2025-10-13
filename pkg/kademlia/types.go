@@ -16,3 +16,7 @@ type Triple struct {
 	Addr Address
 	Port int
 }
+
+func (t Triple) String() string {
+	return fmt.Sprintf("{ID: %x, Addr: %s, Port: %d}", t.ID, t.Addr.String(), t.Port)
+}

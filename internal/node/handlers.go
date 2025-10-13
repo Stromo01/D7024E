@@ -6,12 +6,12 @@ import (
 	"strings"
 
 	. "github.com/eislab-cps/go-template/internal/network"
-	. "github.com/eislab-cps/go-template/pkg/kademlia"
 )
 
 func (node *Node) handleStore(msg Message) error {
 	parts := strings.SplitN(string(msg.Payload), ":", 2)
 	fmt.Printf("Storing %s", parts)
+	node.routing.AddContact(msg.FromContact)
 	if len(parts) == 2 {
 		key := parts[0]
 		value := []byte(parts[1])
@@ -41,13 +41,7 @@ func (node *Node) handlePing(msg Message) error {
 		msg.From.String(),
 		msg.FromContact.ID)
 
-	// Use the address from FromContact, not msg.From
-	contactToAdd := Triple{
-		ID:   msg.FromContact.ID,
-		Addr: msg.FromContact.Addr, // Use this instead of msg.From
-		Port: msg.FromContact.Port,
-	}
-	node.routing.AddContact(contactToAdd)
+	node.routing.AddContact(msg.FromContact)
 	return node.Send(msg.FromContact.Addr, MsgPong, []byte("pong"))
 }
 
@@ -56,14 +50,7 @@ func (node *Node) handlePong(msg Message) error {
 		node.Address().String(),
 		msg.From.String(),
 		msg.FromContact.ID)
-
-	contactToAdd := Triple{
-		ID:   msg.FromContact.ID,
-		Addr: msg.FromContact.Addr,
-		Port: msg.FromContact.Port,
-	}
-
-	node.routing.AddContact(contactToAdd)
+	node.routing.AddContact(msg.FromContact)
 	return nil
 }
 
@@ -72,8 +59,7 @@ func (node *Node) handleFindNode(msg Message) error {
 		node.Address().String(),
 		msg.From.String(),
 		msg.FromContact.ID)
-
-	// Expect payload as "key"
+	node.routing.AddContact(msg.FromContact)
 	key := string(msg.Payload)
 	closest := node.routing.GetKClosest(key, K)
 	var respPayload = tripleSerialize(closest)
@@ -86,7 +72,7 @@ func (node *Node) handleFindNodeResponse(msg Message) error {
 		node.Address().String(),
 		msg.From.String(),
 		msg.FromContact.ID)
-
+	node.routing.AddContact(msg.FromContact)
 	payload := string(msg.Payload)
 	if payload != "" {
 		triples, err := tripleDeserialize(payload)
@@ -106,11 +92,7 @@ func (node *Node) handleFindValue(msg Message) error {
 		msg.From.String(),
 		msg.FromContact.ID)
 	key := string(msg.Payload)
-
-	// Add the sender to routing table
-	if len(msg.FromContact.ID) > 0 {
-		node.routing.AddContact(msg.FromContact)
-	}
+	node.routing.AddContact(msg.FromContact)
 
 	// Check if we have the value
 	if val, ok := node.FindObjectLocally(key); ok {

@@ -5,6 +5,8 @@ import (
 	"os"
 	"strings"
 	"testing"
+
+	. "github.com/eislab-cps/go-template/internal/cli"
 )
 
 func TestShowHelp(t *testing.T) {
@@ -13,7 +15,7 @@ func TestShowHelp(t *testing.T) {
 	r, w, _ := os.Pipe()
 	os.Stdout = w
 
-	showHelp()
+	ShowHelp()
 
 	w.Close()
 	os.Stdout = oldStdout
@@ -40,16 +42,16 @@ func TestShowHelp(t *testing.T) {
 func TestCurrentNodeVariable(t *testing.T) {
 	// Test that currentNode can be set
 	testNode := "test-node"
-	currentNode = testNode
+	CurrentNode = testNode
 
-	if currentNode != testNode {
+	if CurrentNode != testNode {
 		t.Error("currentNode should be settable")
 	}
 
 	// Clean up
-	currentNode = nil
+	CurrentNode = nil
 
-	if currentNode != nil {
-		t.Error("currentNode should be nil after cleanup")
+	if CurrentNode != nil {
+		t.Error("CurrentNode should be nil after cleanup")
 	}
 }

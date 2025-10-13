@@ -7,10 +7,10 @@ import (
 	"strings"
 )
 
-var currentNode interface{}
+var CurrentNode interface{}
 
 func StartInteractiveCLI(node interface{}) {
-	currentNode = node
+	CurrentNode = node
 	scanner := bufio.NewScanner(os.Stdin)
 
 	fmt.Println("Kademlia CLI started. Type 'help' for commands or 'exit' to quit.")
@@ -36,7 +36,7 @@ func StartInteractiveCLI(node interface{}) {
 			fmt.Println("Goodbye!")
 			return
 		case "help":
-			showHelp()
+			ShowHelp()
 		case "put":
 			if len(args) < 2 {
 				fmt.Println("Usage: put <data>")
@@ -57,7 +57,7 @@ func StartInteractiveCLI(node interface{}) {
 	}
 }
 
-func showHelp() {
+func ShowHelp() {
 	fmt.Println("Available commands:")
 	fmt.Println("  put <data>  - Store data and return hash")
 	fmt.Println("  get <hash>  - Retrieve data by hash")

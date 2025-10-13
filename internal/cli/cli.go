@@ -9,12 +9,11 @@ import (
 
 var CurrentNode interface{}
 
-func StartInteractiveCLI(node interface{}) {
-	CurrentNode = node
-	scanner := bufio.NewScanner(os.Stdin)
-
+func StartInteractiveCLI(node interface{ Close() error }) {
 	fmt.Println("Kademlia CLI started. Type 'help' for commands or 'exit' to quit.")
 	fmt.Print("kademlia> ")
+	CurrentNode = node
+	scanner := bufio.NewScanner(os.Stdin)
 
 	for scanner.Scan() {
 		input := strings.TrimSpace(scanner.Text())
@@ -34,6 +33,7 @@ func StartInteractiveCLI(node interface{}) {
 		switch command {
 		case "exit", "quit":
 			fmt.Println("Goodbye!")
+			node.Close()
 			return
 		case "help":
 			ShowHelp()

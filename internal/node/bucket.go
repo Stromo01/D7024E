@@ -128,13 +128,11 @@ func (b *Bucket) IsFull() bool {
 }
 
 // GetLeastRecentlyUsed returns the contact that should be evicted
-// This is useful for bucket management when implementing ping-before-evict
 func (b *Bucket) GetLeastRecentlyUsed() *Triple {
 	return b.GetLast()
 }
 
 // MoveToFront moves an existing contact to the front (most recent position)
-// This is useful when you receive a message from a known contact
 func (b *Bucket) MoveToFront(triple Triple) bool {
 	for i, t := range b.List {
 		if bytes.Equal(t.ID, triple.ID) {

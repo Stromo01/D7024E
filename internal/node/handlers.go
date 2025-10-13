@@ -50,7 +50,7 @@ func (node *Node) handleFindNode(msg Message) error {
 	node.routing.AddContact(msg.FromContact)
 	key := string(msg.Payload)
 	closest := node.routing.GetKClosest(key, K)
-	var respPayload = tripleSerialize(closest)
+	var respPayload = TripleSerialize(closest)
 
 	// Send response with same correlation ID
 	responseMsg := Message{
@@ -91,7 +91,7 @@ func (node *Node) handleFindNodeResponse(msg Message) error {
 	// Handle uncorrelated response
 	payload := string(msg.Payload)
 	if payload != "" {
-		triples, err := tripleDeserialize(payload)
+		triples, err := TripleDeserialize(payload)
 		if err != nil {
 			return fmt.Errorf("invalid find_node_response payload: %v", err)
 		}
@@ -117,7 +117,7 @@ func (node *Node) handleFindValue(msg Message) error {
 		responsePayload = []byte("VALUE:" + string(val))
 	} else {
 		closest := node.routing.GetKClosest(key, K)
-		respPayload := tripleSerialize(closest)
+		respPayload := TripleSerialize(closest)
 		fmt.Printf("Value not found, Node %s found closest nodes for key %s: %s\n", node.Address().String(), key, respPayload)
 		responsePayload = []byte(respPayload)
 	}
@@ -171,7 +171,7 @@ func (node *Node) handleFindValueResponse(msg Message) error {
 
 	// Parse and add nodes to routing table
 	fmt.Printf("Received uncorrelated node list, parsing contacts...\n")
-	triples, err := tripleDeserialize(payload)
+	triples, err := TripleDeserialize(payload)
 	if err != nil {
 		return fmt.Errorf("invalid find_value_response payload: %v", err)
 	}

@@ -234,7 +234,7 @@ func (n *Node) processQueryResponse(msg Message, findValue bool) queryResult {
 	}
 
 	// Parse as node list
-	nodes, err := tripleDeserialize(payload)
+	nodes, err := TripleDeserialize(payload)
 	if err != nil {
 		fmt.Printf("Error deserializing nodes: %v\n", err)
 		return queryResult{found: false, nodes: []Triple{}}

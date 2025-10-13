@@ -2,7 +2,6 @@ package node_test
 
 import (
 	"bytes"
-	"sync"
 	"testing"
 	"time"
 
@@ -80,17 +79,6 @@ func TestNodeStoreAndRetrieve(t *testing.T) {
 	}
 }
 
-type TestNetwork struct {
-	sentMessages map[string][]Message
-	mu           sync.RWMutex
-}
-
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
 func TestNodeIterativeStore(t *testing.T) {
 	// Use the same network as other tests
 	network := NewUDPNetwork()

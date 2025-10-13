@@ -11,6 +11,7 @@ import (
 func (node *Node) handleStore(msg Message) error {
 	parts := strings.SplitN(string(msg.Payload), ":", 2)
 	fmt.Printf("Storing %s", parts)
+	node.addContact(msg)
 	if len(parts) == 2 {
 		key := parts[0]
 		value := []byte(parts[1])
@@ -33,13 +34,7 @@ func (node *Node) handlePing(msg Message) error {
 		msg.From.String(),
 		msg.FromContact.ID)
 
-	// Use the address from FromContact, not msg.From
-	contactToAdd := Triple{
-		ID:   msg.FromContact.ID,
-		Addr: msg.FromContact.Addr, // Use this instead of msg.From
-		Port: msg.FromContact.Port,
-	}
-	node.routing.AddContact(contactToAdd)
+	node.addContact(msg)
 	return node.Send(msg.FromContact.Addr, MsgPong, []byte("pong"))
 }
 
@@ -48,14 +43,7 @@ func (node *Node) handlePong(msg Message) error {
 		node.Address().String(),
 		msg.From.String(),
 		msg.FromContact.ID)
-
-	contactToAdd := Triple{
-		ID:   msg.FromContact.ID,
-		Addr: msg.FromContact.Addr,
-		Port: msg.FromContact.Port,
-	}
-
-	node.routing.AddContact(contactToAdd)
+	node.addContact(msg)
 	return nil
 }
 
@@ -64,8 +52,7 @@ func (node *Node) handleFindNode(msg Message) error {
 		node.Address().String(),
 		msg.From.String(),
 		msg.FromContact.ID)
-
-	// Expect payload as "key"
+	node.addContact(msg)
 	key := string(msg.Payload)
 	closest := node.routing.GetKClosest(key, K)
 	var respPayload = tripleSerialize(closest)
@@ -78,7 +65,7 @@ func (node *Node) handleFindNodeResponse(msg Message) error {
 		node.Address().String(),
 		msg.From.String(),
 		msg.FromContact.ID)
-
+	node.addContact(msg)
 	payload := string(msg.Payload)
 	if payload != "" {
 		triples, err := tripleDeserialize(payload)
@@ -98,11 +85,7 @@ func (node *Node) handleFindValue(msg Message) error {
 		msg.From.String(),
 		msg.FromContact.ID)
 	key := string(msg.Payload)
-
-	// Add the sender to routing table
-	if len(msg.FromContact.ID) > 0 {
-		node.routing.AddContact(msg.FromContact)
-	}
+	node.addContact(msg)
 
 	// Check if we have the value
 	if val, ok := node.FindObjectLocally(key); ok {
@@ -115,4 +98,13 @@ func (node *Node) handleFindValue(msg Message) error {
 		fmt.Printf("Value not found, Node %s found closest nodes for key %s: %s\n", node.Address().String(), key, respPayload)
 		return node.Send(msg.From, "find_value_response", []byte(respPayload))
 	}
+}
+
+func (node *Node) addContact(msg Message) {
+	contactToAdd := Triple{
+		ID:   msg.FromContact.ID,
+		Addr: msg.FromContact.Addr,
+		Port: msg.FromContact.Port,
+	}
+	node.routing.AddContact(contactToAdd)
 }

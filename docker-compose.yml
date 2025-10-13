@@ -6,7 +6,6 @@ services:
     environment:
       - NODE_PORT=8000
       - IS_BOOTSTRAP=true
-      - ADVERTISE_HOST=bootstrap
     ports:
       - "8000:8000"
     networks:
@@ -19,9 +18,8 @@ services:
     image: d7024e-node:latest
     restart: "no"
     environment:
-      - NODE_PORT=8001
+      - NODE_PORT=0
       - BOOTSTRAP_ADDR=bootstrap:8000
-      - ADVERTISE_HOST=node
     depends_on:
       - bootstrap
     networks:
@@ -31,3 +29,4 @@ services:
 
 networks:
   kademlia_network:
+  

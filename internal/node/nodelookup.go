@@ -22,14 +22,23 @@ func (n *Node) iterativeFindNode(key string) []Triple {
 	fmt.Printf("Found nodes for key %s: %s\n", key, nodes)
 	return nodes
 }
+
 func (n *Node) IterativeStore(key string, value []byte) {
 	var nodes []Triple = n.iterativeFindNode(key)
 	fmt.Printf("Storing key %s at nodes: ", key)
 	for _, node := range nodes {
 		fmt.Printf("%s ", node.Addr.String())
 	}
+	fmt.Println() // Add newline
+
+	// Store locally first
+	n.StoreObject(key, value)
+
+	// Send to remote nodes with proper format
 	for _, node := range nodes {
-		n.Send(node.Addr, "store", value)
+		// Send as "key:value" format in payload
+		payload := fmt.Sprintf("%s:%s", key, string(value))
+		n.Send(node.Addr, "store", []byte(payload))
 	}
 }
 

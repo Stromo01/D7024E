@@ -2,6 +2,7 @@ package node
 
 import (
 	"fmt"
+	"log"
 	"strings"
 
 	. "github.com/eislab-cps/go-template/internal/network"
@@ -19,11 +20,18 @@ func (node *Node) handleStore(msg Message) error {
 		fmt.Printf("Node %s stored object with key %s from %s\n",
 			node.Address().String(), key, msg.From.String())
 
-		// Add the sender to routing table
-		if len(msg.FromContact.ID) > 0 {
-			node.routing.AddContact(msg.FromContact)
-		}
+	} else {
+		// The payload is the value, we need the key from elsewhere
+		// This might be sent differently - check your IterativeStore implementation
+		log.Printf("Store message format unclear: %s", string(msg.Payload))
+		return fmt.Errorf("invalid store message format")
 	}
+
+	// Add the sender to routing table
+	if len(msg.FromContact.ID) > 0 {
+		node.routing.AddContact(msg.FromContact)
+	}
+
 	return nil
 }
 

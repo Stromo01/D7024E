@@ -64,10 +64,18 @@ func (rt *RoutingTable) GetKClosest(key string, K int) []Triple {
 func (rt *RoutingTable) AddContact(contact Triple) {
 	rt.mu.RLock() // Read lock for getting bucket
 	fmt.Printf("Adding contact %s (ID: %x) to routing table\n", contact.Addr.String(), contact.ID)
+
 	if bytes.Equal(contact.ID, rt.Me.ID) {
 		return // Don't add ourselves
 	}
-
+	for _, bucket := range rt.Buckets { //Dont add if it already exists
+		for _, c := range bucket.List {
+			if bytes.Equal(c.ID, contact.ID) {
+				return
+			}
+		}
+	}
+	fmt.Printf("Adding contact %s (ID: %x) to routing table\n", contact.Addr.String(), contact.ID)
 	bucketIndex := rt.GetBucketIndex(contact.ID)
 	bucket := rt.Buckets[bucketIndex]
 	rt.mu.RUnlock()

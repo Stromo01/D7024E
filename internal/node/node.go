@@ -69,7 +69,7 @@ func (n *Node) FindObject(key string) ([]byte, string, bool) {
 	if value, found := n.iterativeFindValue(key); found {
 		return value, "network", true
 	}
-
+	fmt.Print("Object not found in network")
 	return nil, "", false
 }
 

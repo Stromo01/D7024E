@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"net"
 	"os"
 	"strconv"
 	"strings"
@@ -13,6 +14,18 @@ import (
 	. "github.com/eislab-cps/go-template/internal/node"
 	. "github.com/eislab-cps/go-template/pkg/kademlia"
 )
+
+func outboundIP() string {
+	c, err := net.Dial("udp", "8.8.8.8:80")
+	if err != nil {
+		return "127.0.0.1"
+	}
+	defer c.Close()
+	if ua, ok := c.LocalAddr().(*net.UDPAddr); ok {
+		return ua.IP.String()
+	}
+	return "127.0.0.1"
+}
 
 func main() {
 	fmt.Print("Starting Kademlia node...\n")
@@ -52,11 +65,7 @@ func startKademliaNode() *Node {
 
 	advertiseHost := os.Getenv("ADVERTISE_HOST")
 	if advertiseHost == "" {
-		if hostname, err := os.Hostname(); err == nil {
-			advertiseHost = hostname
-		} else {
-			advertiseHost = "127.0.0.1"
-		}
+		advertiseHost = outboundIP()
 	}
 
 	advertiseAddr := Address{IP: advertiseHost, Port: *portPtr}

@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"net"
 	"sync"
 )
 
@@ -35,6 +36,7 @@ func (n *mockNetwork) Dial(addr Address) (Connection, error) {
 	if _, exists := n.listeners[addr]; !exists {
 		return nil, errors.New("address not found")
 	}
+	// Dial returns a non-listening connection (recvCh == nil)
 	return &mockConnection{addr: addr, network: n}, nil
 }
 
@@ -66,6 +68,7 @@ type mockConnection struct {
 func (c *mockConnection) Send(msg Message) error {
 	c.network.mu.RLock()
 
+	// Simulate partition on either endpoint
 	if c.network.partitions[c.addr] || c.network.partitions[msg.To] {
 		c.network.mu.RUnlock()
 		return errors.New("network partitioned")
@@ -77,10 +80,10 @@ func (c *mockConnection) Send(msg Message) error {
 		return errors.New("destination address not found")
 	}
 
-	// Add network reference to message for replies
+	// Add network reference for replies
 	msg.network = c.network
 
-	// Keep the lock while sending to prevent the channel from being closed
+	// Keep the lock while enqueueing
 	select {
 	case ch <- msg:
 		c.network.mu.RUnlock()
@@ -111,7 +114,7 @@ func (c *mockConnection) Close() error {
 	c.mu.Lock()
 	if c.closed {
 		c.mu.Unlock()
-		return nil // Already closed
+		return nil
 	}
 	c.closed = true
 	c.mu.Unlock()
@@ -125,4 +128,16 @@ func (c *mockConnection) Close() error {
 		c.recvCh = nil
 	}
 	return nil
+}
+
+// mockAddr implements net.Addr for the mock transport.
+type mockAddr struct {
+	a Address
+}
+
+func (m mockAddr) Network() string { return "mock" }
+func (m mockAddr) String() string  { return m.a.String() }
+
+func (c *mockConnection) LocalAddr() net.Addr {
+	return mockAddr{a: c.addr}
 }

@@ -37,6 +37,7 @@ type Connection interface {
 	Send(msg Message) error
 	Recv() (Message, error)
 	Close() error
+	LocalAddr() net.Addr
 }
 
 type Message struct {
@@ -75,9 +76,10 @@ func (n *UDPNetwork) Listen(addr Address) (Connection, error) {
 	}
 
 	return &UDPConnection{
-		conn:    conn,
-		addr:    addr,
-		network: n,
+		conn:      conn,
+		localAddr: addr,
+		network:   n,
+		connected: false,
 	}, nil
 }
 
@@ -94,19 +96,21 @@ func (n *UDPNetwork) Dial(addr Address) (Connection, error) {
 		return nil, fmt.Errorf("failed to resolve UDP address %s: %v", addr.String(), err)
 	}
 
-	// IMPORTANT: Don't use DialUDP - it creates random source ports
-	// Instead, create a temporary connection for sending
+	// Connected UDP socket to that remote (one-off sender)
 	conn, err := net.DialUDP("udp", nil, udpAddr)
 	if err != nil {
 		return nil, fmt.Errorf("failed to dial %s: %v", addr.String(), err)
 	}
 
-	// Set timeout for operations
-	conn.SetDeadline(time.Now().Add(5 * time.Second))
+	// Set timeout for operations (one-off)
+	_ = conn.SetDeadline(time.Now().Add(5 * time.Second))
 
-	return &UDPDialConnection{
-		conn:    conn,
-		network: n,
+	return &UDPConnection{
+		conn:      conn,
+		localAddr: AddressFromNetAddr(conn.LocalAddr()),
+		remote:    udpAddr,
+		network:   n,
+		connected: true,
 	}, nil
 }
 
@@ -129,132 +133,103 @@ func (n *UDPNetwork) Heal() {
 	n.partition2 = make(map[string]bool)
 }
 
-// UDPConnection for listening connections
+// UDPConnection serves both listening and connected UDP sockets.
 type UDPConnection struct {
-	conn    *net.UDPConn
-	addr    Address
+	conn      *net.UDPConn
+	localAddr Address
+
+	// For connected sockets (Dial)
+	connected bool
+	remote    *net.UDPAddr
+
 	network *UDPNetwork
 }
 
 func (c *UDPConnection) Send(msg Message) error {
-	// Serialize the message for transmission
-	wireMsg := WireMessage{
+	wire, err := encodeWireMessage(WireMessage{
 		FromContact: msg.FromContact,
 		Payload:     msg.Payload,
-	}
-
-	data, err := json.Marshal(wireMsg)
+	})
 	if err != nil {
-		return fmt.Errorf("failed to marshal message: %v", err)
+		return err
 	}
 
-	// Resolve target address
+	if c.connected {
+		// Connected socket: destination is fixed
+		if _, err := c.conn.Write(wire); err != nil {
+			return fmt.Errorf("failed to write UDP message: %v", err)
+		}
+		return nil
+	}
+
+	// Listening socket: send to msg.To
 	targetAddr, err := net.ResolveUDPAddr("udp", msg.To.String())
 	if err != nil {
 		return fmt.Errorf("failed to resolve target address: %v", err)
 	}
-
-	// Send using the listening connection (maintains source port)
-	_, err = c.conn.WriteToUDP(data, targetAddr)
-	if err != nil {
+	if _, err := c.conn.WriteToUDP(wire, targetAddr); err != nil {
 		return fmt.Errorf("failed to write UDP message: %v", err)
 	}
-
-	fmt.Printf("Node %s sent message to %s\n", c.addr.String(), msg.To.String())
 	return nil
 }
 
 func (c *UDPConnection) Recv() (Message, error) {
 	buffer := make([]byte, 4096)
+
+	if c.connected {
+		// Connected socket read
+		n, err := c.conn.Read(buffer)
+		if err != nil {
+			return Message{}, fmt.Errorf("failed to read UDP message: %v", err)
+		}
+		wire, err := decodeWireMessage(buffer[:n])
+		if err != nil {
+			return Message{}, err
+		}
+		from := AddressFromNetAddr(c.conn.RemoteAddr())
+		return Message{
+			From:        from,
+			FromContact: wire.FromContact,
+			To:          c.localAddr,
+			Payload:     wire.Payload,
+			network:     c.network,
+		}, nil
+	}
+
+	// Listening socket read
 	n, remoteAddr, err := c.conn.ReadFromUDP(buffer)
 	if err != nil {
 		return Message{}, fmt.Errorf("failed to read UDP message: %v", err)
 	}
-
-	// Parse the remote address correctly
-	fromAddr := Address{
+	wire, err := decodeWireMessage(buffer[:n])
+	if err != nil {
+		return Message{}, err
+	}
+	from := Address{
 		IP:   remoteAddr.IP.String(),
 		Port: remoteAddr.Port,
 	}
-
-	// Deserialize the message
-	var wireMsg WireMessage
-	if err := json.Unmarshal(buffer[:n], &wireMsg); err != nil {
-		return Message{}, fmt.Errorf("failed to unmarshal message: %v", err)
-	}
-
 	return Message{
-		From:        fromAddr,
-		FromContact: wireMsg.FromContact,
-		To:          c.addr,
-		Payload:     wireMsg.Payload,
+		From:        from,
+		FromContact: wire.FromContact,
+		To:          c.localAddr,
+		Payload:     wire.Payload,
 		network:     c.network,
 	}, nil
 }
 
 func (c *UDPConnection) Close() error {
+	if c == nil || c.conn == nil {
+		return nil
+	}
 	return c.conn.Close()
 }
 
-// UDPDialConnection for outgoing connections
-type UDPDialConnection struct {
-	conn    *net.UDPConn
-	network *UDPNetwork
-}
-
-func (c *UDPDialConnection) Send(msg Message) error {
-	// Serialize the message for transmission
-	wireMsg := WireMessage{
-		FromContact: msg.FromContact,
-		Payload:     msg.Payload,
+func (c *UDPConnection) LocalAddr() net.Addr {
+	if c == nil || c.conn == nil {
+		return nil
 	}
-
-	data, err := json.Marshal(wireMsg)
-	if err != nil {
-		return fmt.Errorf("failed to marshal message: %v", err)
-	}
-
-	_, err = c.conn.Write(data)
-	if err != nil {
-		return fmt.Errorf("failed to write UDP message: %v", err)
-	}
-
-	return nil
-}
-
-func (c *UDPDialConnection) Recv() (Message, error) {
-	// This shouldn't typically be called on dial connections
-	// But implement for completeness
-	buffer := make([]byte, 4096)
-	n, err := c.conn.Read(buffer)
-	if err != nil {
-		return Message{}, fmt.Errorf("failed to read UDP message: %v", err)
-	}
-
-	// For dial connections, we know the remote address from the connection
-	remoteAddr := c.conn.RemoteAddr().(*net.UDPAddr)
-	fromAddr := Address{
-		IP:   remoteAddr.IP.String(),
-		Port: remoteAddr.Port,
-	}
-
-	// Deserialize the message
-	var wireMsg WireMessage
-	if err := json.Unmarshal(buffer[:n], &wireMsg); err != nil {
-		return Message{}, fmt.Errorf("failed to unmarshal message: %v", err)
-	}
-
-	return Message{
-		From:        fromAddr,
-		FromContact: wireMsg.FromContact,
-		To:          Address{}, // We don't know our own address in this context
-		Payload:     wireMsg.Payload,
-		network:     c.network,
-	}, nil
-}
-
-func (c *UDPDialConnection) Close() error {
-	return c.conn.Close()
+	return c.conn.LocalAddr()
 }
 
 // WireMessage is the serializable format for network transmission
@@ -263,7 +238,40 @@ type WireMessage struct {
 	Payload     []byte `json:"payload"`
 }
 
-// Helper functions
+// Helpers
+
+func encodeWireMessage(m WireMessage) ([]byte, error) {
+	data, err := json.Marshal(m)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal message: %v", err)
+	}
+	return data, nil
+}
+
+func decodeWireMessage(b []byte) (WireMessage, error) {
+	var m WireMessage
+	if err := json.Unmarshal(b, &m); err != nil {
+		return WireMessage{}, fmt.Errorf("failed to unmarshal message: %v", err)
+	}
+	return m, nil
+}
+
+func AddressFromNetAddr(a net.Addr) Address {
+	if a == nil {
+		return Address{}
+	}
+	if ua, ok := a.(*net.UDPAddr); ok {
+		return Address{IP: ua.IP.String(), Port: ua.Port}
+	}
+	// Fallback parse host:port
+	host, portStr, err := net.SplitHostPort(a.String())
+	if err != nil {
+		return Address{}
+	}
+	p := 0
+	fmt.Sscanf(portStr, "%d", &p)
+	return Address{IP: host, Port: p}
+}
 
 // GetLocalIP returns the local IP address
 func GetLocalIP() (string, error) {

@@ -2,7 +2,6 @@ package node_test
 
 import (
 	"bytes"
-	"crypto/rand"
 	"testing"
 	"time"
 
@@ -12,16 +11,6 @@ import (
 )
 
 // Helper function to create a random Triple for testing
-
-func createRandomTripleForNode() Triple {
-	var id [20]byte
-	rand.Read(id[:])
-	return Triple{
-		ID:   id[:],
-		Addr: Address{IP: "127.0.0.1", Port: 8000},
-		Port: 8000,
-	}
-}
 
 func TestNewNode(t *testing.T) {
 	network := NewUDPNetwork()

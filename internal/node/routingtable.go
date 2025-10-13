@@ -56,11 +56,18 @@ func (rt *RoutingTable) GetKClosest(key string, K int) []Triple {
 }
 
 func (rt *RoutingTable) AddContact(contact Triple) {
-	fmt.Printf("Adding contact %s (ID: %x) to routing table\n", contact.Addr.String(), contact.ID)
+
 	if bytes.Equal(contact.ID, rt.Me.ID) {
 		return // Don't add ourselves
 	}
-
+	for _, bucket := range rt.Buckets { //Dont add if it already exists
+		for _, c := range bucket.List {
+			if bytes.Equal(c.ID, contact.ID) {
+				return
+			}
+		}
+	}
+	fmt.Printf("Adding contact %s (ID: %x) to routing table\n", contact.Addr.String(), contact.ID)
 	bucketIndex := rt.GetBucketIndex(contact.ID)
 	bucket := rt.Buckets[bucketIndex]
 	bucket.AddContact(contact)

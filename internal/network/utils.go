@@ -11,6 +11,7 @@ import (
 // WireMessage is the serializable format for network transmission
 type WireMessage struct {
 	FromContact Triple `json:"from_contact"`
+	Type        string `json:"type"`
 	Payload     []byte `json:"payload"`
 }
 

@@ -257,7 +257,6 @@ func (n *Node) Start() {
 		}
 		n.pendingMu.Unlock()
 
-		// determine message type (assumes "TYPE:payload" convention)
 		msgType := msg.Type
 
 		// dispatch to handler
@@ -279,18 +278,23 @@ func (n *Node) Start() {
 	}
 }
 
+// Send sends a message to the target address
 func (n *Node) Send(to Address, msgType string, data []byte) error {
+	// Format payload as "msgType:data"
+
 	actualAddr := AddressFromNetAddr(n.connection.LocalAddr())
 
+	// Create the message with proper FromContact
 	msg := Message{
 		From:        actualAddr,
 		FromContact: Triple{ID: n.Id[:], Addr: actualAddr, Port: actualAddr.Port},
 		To:          to,
-		Type:        msgType, // Use dedicated Type field
-		Payload:     data,    // Clean payload without prefix
+		Type:        msgType,
+		Payload:     data,
 		Network:     n.network,
 	}
 
+	// Use the listening connection for sending (maintains source port)
 	return n.connection.Send(msg)
 }
 

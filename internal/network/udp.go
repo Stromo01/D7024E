@@ -23,6 +23,7 @@ type UDPConnection struct {
 func (c *UDPConnection) Send(msg Message) error {
 	wire, err := encodeWireMessage(WireMessage{
 		FromContact: msg.FromContact,
+		Type:        msg.Type,
 		Payload:     msg.Payload,
 	})
 	if err != nil {
@@ -68,6 +69,7 @@ func (c *UDPConnection) Recv() (Message, error) {
 			FromContact: wire.FromContact,
 			To:          c.localAddr,
 			Payload:     wire.Payload,
+			Type:        wire.Type,
 			Network:     c.network,
 		}, nil
 	}
@@ -90,6 +92,7 @@ func (c *UDPConnection) Recv() (Message, error) {
 		FromContact: wire.FromContact,
 		To:          c.localAddr,
 		Payload:     wire.Payload,
+		Type:        wire.Type,
 		Network:     c.network,
 	}, nil
 }

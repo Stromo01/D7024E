@@ -105,11 +105,13 @@ func (node *Node) handleFindValue(msg Message) error {
 
 	// Check if we have the value
 	if val, ok := node.FindObjectLocally(key); ok {
+		fmt.Printf("Node %s found value for key %s locally\n", node.Address().String(), key)
 		return node.Send(msg.From, "find_value_response", []byte("VALUE:"+string(val)))
 	} else {
 		// Return closest nodes
 		closest := node.routing.GetKClosest(key, K)
 		respPayload := tripleSerialize(closest)
+		fmt.Printf("Value not found, Node %s found closest nodes for key %s: %s\n", node.Address().String(), key, respPayload)
 		return node.Send(msg.From, "find_value_response", []byte(respPayload))
 	}
 }

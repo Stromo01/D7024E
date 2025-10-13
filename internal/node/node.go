@@ -2,12 +2,9 @@ package node
 
 import (
 	"crypto/rand"
-	"encoding/hex"
 	"fmt"
 	"log"
 	"math/big"
-	"strconv"
-	"strings"
 	"sync"
 	"time"
 
@@ -136,54 +133,6 @@ func (n *Node) GetAllContacts() []Triple {
 	return contacts
 }
 
-func tripleDeserialize(data string) ([]Triple, error) {
-	if data == "" {
-		return []Triple{}, nil
-	}
-
-	parts := strings.Split(data, ",")
-	var triples []Triple
-
-	for _, part := range parts {
-		components := strings.Split(part, ":")
-		if len(components) != 3 {
-			continue // Skip malformed entries
-		}
-
-		ip := components[0]
-		port, err := strconv.Atoi(components[1])
-		if err != nil {
-			continue // Skip malformed entries
-		}
-
-		id, err := hex.DecodeString(components[2])
-		if err != nil {
-			continue // Skip malformed entries
-		}
-
-		triple := Triple{
-			ID:   id,
-			Addr: Address{IP: ip, Port: port},
-			Port: port,
-		}
-		triples = append(triples, triple)
-	}
-
-	return triples, nil
-}
-
-func tripleSerialize(triples []Triple) string {
-	var parts []string
-	for _, triple := range triples {
-		part := fmt.Sprintf("%s:%d:%x",
-			triple.Addr.IP,
-			triple.Addr.Port,
-			triple.ID)
-		parts = append(parts, part)
-	}
-	return strings.Join(parts, ",")
-}
-
 // JoinNetwork: send PING to known node and add to contacts
 func (n *Node) JoinNetwork(bootstrapNode Triple) error {
 	fmt.Printf("Attempting to join network via %s\n", bootstrapNode.Addr.String())
@@ -256,74 +205,11 @@ func (n *Node) Start() {
 			break
 		}
 
-		n.handleMessageConcurrently(msg)
+		n.HandleMessageConcurrently(msg)
 	}
 	log.Println("Waiting for active message handlers to finish...")
 	n.messageWG.Wait()
 	log.Println("Node closed successfully")
-}
-
-func (n *Node) handleMessageConcurrently(msg Message) {
-	// Try to acquire semaphore (non-blocking)
-	select {
-	case n.semaphore <- struct{}{}: // Acquired semaphore
-		// Add to WaitGroup before starting goroutine
-		n.messageWG.Add(1)
-
-		// Handle message in separate goroutine
-		go func(message Message) {
-			defer func() {
-				// Release semaphore and mark as done
-				<-n.semaphore
-				n.messageWG.Done()
-			}()
-
-			// Handle the message
-			n.handleMessage(message)
-		}(msg)
-
-	default:
-		// All handlers busy, handle synchronously to prevent blocking
-		log.Printf("All %d handlers busy, handling message synchronously", n.maxConcurrent)
-		n.handleMessage(msg)
-	}
-}
-
-func (n *Node) handleMessage(msg Message) {
-	// Check if this is a pending correlation response
-	n.pendingMu.Lock()
-	if ch, ok := n.pending[msg.ID]; ok {
-		select {
-		case ch <- msg:
-		default:
-		}
-		delete(n.pending, msg.ID)
-		n.pendingMu.Unlock()
-		return
-	}
-	n.pendingMu.Unlock()
-
-	msgType := msg.Type
-	if msgType == "" {
-		msgType = "default"
-	}
-
-	// Get handler (thread-safe read)
-	n.mu.RLock()
-	handler, exists := n.handlers[msgType]
-	if !exists {
-		handler, exists = n.handlers["default"]
-	}
-	n.mu.RUnlock()
-
-	// Execute handler
-	if exists && handler != nil {
-		if err := handler(msg); err != nil {
-			log.Printf("Handler error from %s: %v", msg.From.String(), err)
-		}
-	} else {
-		log.Printf("No handler for msg type %q from %s", msgType, msg.From.String())
-	}
 }
 
 // Send sends a message to the target address

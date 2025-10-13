@@ -2,7 +2,6 @@ package cli
 
 import (
 	"bufio"
-	"crypto/sha1"
 	"fmt"
 	"os"
 	"strings"
@@ -42,13 +41,13 @@ func StartInteractiveCLI(node interface{}) {
 			if len(args) < 2 {
 				fmt.Println("Usage: put <data>")
 			} else {
-				handlePut(strings.Join(args[1:], " "))
+				HandlePut(strings.Join(args[1:], " "))
 			}
 		case "get":
 			if len(args) < 2 {
 				fmt.Println("Usage: get <hash>")
 			} else {
-				handleGet(args[1])
+				HandleGet(args[1])
 			}
 		default:
 			fmt.Printf("Unknown command: %s. Type 'help' for available commands.\n", command)
@@ -64,38 +63,4 @@ func showHelp() {
 	fmt.Println("  get <hash>  - Retrieve data by hash")
 	fmt.Println("  help        - Show this help")
 	fmt.Println("  exit        - Exit the CLI")
-}
-
-func handlePut(data string) {
-	if currentNode == nil {
-		fmt.Println("Error: No node available")
-		return
-	}
-
-	hash := fmt.Sprintf("%x", sha1.Sum([]byte(data)))
-
-	if node, ok := currentNode.(interface{ IterativeStore(string, []byte) }); ok {
-		node.IterativeStore(hash, []byte(data))
-		fmt.Printf("%s\n", hash)
-	} else {
-		fmt.Println("Error: Node does not support IterativeStore method")
-	}
-}
-
-func handleGet(hash string) {
-	if currentNode == nil {
-		fmt.Println("Error: No node available")
-		return
-	}
-
-	// You'll need to implement this based on your node's get method
-	fmt.Printf("Getting data for hash: %s\n", hash)
-	// Example: if node, ok := currentNode.(interface{ FindObject(string) ([]byte, string, bool) }); ok {
-	//     value, source, found := node.FindObject(hash)
-	//     if found {
-	//         fmt.Printf("Found: %s (from %s)\n", string(value), source)
-	//     } else {
-	//         fmt.Printf("Not found\n")
-	//     }
-	// }
 }

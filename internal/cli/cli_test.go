@@ -60,7 +60,7 @@ func TestHandlePut(t *testing.T) {
 	r, w, _ := os.Pipe()
 	os.Stdout = w
 
-	handlePut(testData)
+	HandlePut(testData)
 
 	w.Close()
 	os.Stdout = oldStdout
@@ -101,7 +101,7 @@ func TestHandleGet(t *testing.T) {
 	r, w, _ := os.Pipe()
 	os.Stdout = w
 
-	handleGet(hash)
+	HandleGet(hash)
 
 	w.Close()
 	os.Stdout = oldStdout
@@ -151,7 +151,7 @@ func TestHandlePutWithNoNode(t *testing.T) {
 	r, w, _ := os.Pipe()
 	os.Stdout = w
 
-	handlePut("test data")
+	HandlePut("test data")
 
 	w.Close()
 	os.Stdout = oldStdout
@@ -173,7 +173,7 @@ func TestHandleGetWithNoNode(t *testing.T) {
 	r, w, _ := os.Pipe()
 	os.Stdout = w
 
-	handleGet("somehash")
+	HandleGet("somehash")
 
 	w.Close()
 	os.Stdout = oldStdout
@@ -200,7 +200,7 @@ func TestHandleGetNotFound(t *testing.T) {
 	os.Stdout = w
 
 	// Try to get non-existent hash
-	handleGet("nonexistenthash")
+	HandleGet("nonexistenthash")
 
 	w.Close()
 	os.Stdout = oldStdout
@@ -228,7 +228,7 @@ func TestPutGetWorkflow(t *testing.T) {
 	r, w, _ := os.Pipe()
 	os.Stdout = w
 
-	handlePut(testData)
+	HandlePut(testData)
 
 	w.Close()
 	os.Stdout = oldStdout
@@ -240,7 +240,7 @@ func TestPutGetWorkflow(t *testing.T) {
 	r, w, _ = os.Pipe()
 	os.Stdout = w
 
-	handleGet(hash)
+	HandleGet(hash)
 
 	w.Close()
 	os.Stdout = oldStdout

@@ -1,7 +1,6 @@
 package network
 
 import (
-	"encoding/json"
 	"fmt"
 	"net"
 	"sync"
@@ -21,60 +20,84 @@ type UDPConnection struct {
 
 // Send transmits a message through the UDP connection
 func (c *UDPConnection) Send(msg Message) error {
-	w := WireMessage{ID: msg.ID, Type: msg.Type, FromContact: msg.FromContact, Payload: msg.Payload}
-	b, err := json.Marshal(w)
+	c.sendMu.Lock()
+	defer c.sendMu.Unlock()
+
+	wire, err := encodeWireMessage(WireMessage{
+		ID:          msg.ID,
+		FromContact: msg.FromContact,
+		Type:        msg.Type,
+		Payload:     msg.Payload,
+	})
 	if err != nil {
 		return err
 	}
+
 	if c.connected {
-		_, err = c.conn.Write(b)
-		return err
+		// Connected socket: destination is fixed
+		if _, err := c.conn.Write(wire); err != nil {
+			return fmt.Errorf("failed to write UDP message: %v", err)
+		}
+		return nil
 	}
-	ra, err := net.ResolveUDPAddr("udp", msg.To.String())
+
+	// Listening socket: send to msg.To
+	targetAddr, err := net.ResolveUDPAddr("udp", msg.To.String())
 	if err != nil {
-		return fmt.Errorf("resolve dst: %w", err)
+		return fmt.Errorf("failed to resolve target address: %v", err)
 	}
-	_, err = c.conn.WriteToUDP(b, ra)
-	return err
+	if _, err := c.conn.WriteToUDP(wire, targetAddr); err != nil {
+		return fmt.Errorf("failed to write UDP message: %v", err)
+	}
+	return nil
 }
 
 // Recv receives a message from the UDP connection
 func (c *UDPConnection) Recv() (Message, error) {
-	buf := make([]byte, 65535)
+	buffer := make([]byte, 4096)
+
 	if c.connected {
-		n, err := c.conn.Read(buf)
+		// Connected socket read
+		n, err := c.conn.Read(buffer)
+		if err != nil {
+			return Message{}, fmt.Errorf("failed to read UDP message: %v", err)
+		}
+		wire, err := decodeWireMessage(buffer[:n])
 		if err != nil {
 			return Message{}, err
 		}
-		var w WireMessage
-		if err := json.Unmarshal(buf[:n], &w); err != nil {
-			return Message{}, err
-		}
+		from := AddressFromNetAddr(c.conn.RemoteAddr())
 		return Message{
-			ID:          w.ID,
-			Type:        w.Type,
-			From:        AddressFromNetAddr(c.conn.RemoteAddr()),
-			FromContact: w.FromContact,
+			ID:          wire.ID,
+			From:        from,
+			FromContact: wire.FromContact,
 			To:          c.localAddr,
-			Payload:     w.Payload,
+			Payload:     wire.Payload,
+			Type:        wire.Type,
 			Network:     c.network,
 		}, nil
 	}
-	n, ra, err := c.conn.ReadFromUDP(buf)
+
+	// Listening socket read
+	n, remoteAddr, err := c.conn.ReadFromUDP(buffer)
+	if err != nil {
+		return Message{}, fmt.Errorf("failed to read UDP message: %v", err)
+	}
+	wire, err := decodeWireMessage(buffer[:n])
 	if err != nil {
 		return Message{}, err
 	}
-	var w WireMessage
-	if err := json.Unmarshal(buf[:n], &w); err != nil {
-		return Message{}, err
+	from := Address{
+		IP:   remoteAddr.IP.String(),
+		Port: remoteAddr.Port,
 	}
 	return Message{
-		ID:          w.ID,
-		Type:        w.Type,
-		From:        Address{IP: ra.IP.String(), Port: ra.Port},
-		FromContact: w.FromContact,
+		ID:          wire.ID,
+		From:        from,
+		FromContact: wire.FromContact,
 		To:          c.localAddr,
-		Payload:     w.Payload,
+		Payload:     wire.Payload,
+		Type:        wire.Type,
 		Network:     c.network,
 	}, nil
 }

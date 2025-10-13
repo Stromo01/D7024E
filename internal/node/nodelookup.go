@@ -50,28 +50,21 @@ func (n *Node) IterativeStore(key string, value []byte) {
 // NodeLookup
 func (n *Node) nodeLookup(key string, findValue ...bool) ([]Triple, []byte, bool) {
 	isValueSearch := len(findValue) > 0 && findValue[0]
-
-	// Initial shortlist
 	shortlist := n.routing.GetKClosest(key, K)
-	shortlist = dedupByID(shortlist)
-
-	// Track queried nodes by address string
-	queried := make(map[string]bool, len(shortlist))
+	queried := make(map[string]bool)
 
 	for {
 		fmt.Printf("----------\n")
-		fmt.Printf("New iteration of nodeLookup.Shortlist:\n")
+		fmt.Printf("New iteration of nodeLookup.Shortlist: \n")
 		for _, node := range shortlist {
-			fmt.Printf("%s\n", node.String())
+			fmt.Printf(node.String() + "\n")
 		}
 		fmt.Printf("----------\n")
-
-		// Select up to Alpha unqueried nodes
-		toQuery := make([]Triple, 0, Alpha)
-		for _, c := range shortlist {
-			if !queried[c.Addr.String()] && len(toQuery) < Alpha {
-				toQuery = append(toQuery, c)
-				queried[c.Addr.String()] = true
+		toQuery := make([]Triple, 0, Alpha) // Select up to Alpha unqueried nodes
+		for _, contact := range shortlist {
+			if !queried[contact.Addr.String()] && len(toQuery) < Alpha {
+				toQuery = append(toQuery, contact)
+				queried[contact.Addr.String()] = true
 			}
 		}
 
@@ -79,83 +72,42 @@ func (n *Node) nodeLookup(key string, findValue ...bool) ([]Triple, []byte, bool
 			break
 		}
 
-		// Query in parallel
-		var wg sync.WaitGroup
+		var wg sync.WaitGroup // Query in parallel
 		resultsChan := make(chan queryResult, len(toQuery))
 
 		for _, contact := range toQuery {
 			wg.Add(1)
 			go func(c Triple) {
 				defer wg.Done()
-				resultsChan <- n.queryNode(c, key, isValueSearch)
+				result := n.queryNode(c, key, isValueSearch)
+				resultsChan <- result
 			}(contact)
 		}
 
 		wg.Wait()
 		close(resultsChan)
 
-		// Collect newly learned nodes and value (if any)
-		var (
-			newNodes []Triple
-			value    []byte
-			found    bool
-		)
-
+		var newNodes []Triple // Collect new nodes
 		for result := range resultsChan {
-			if result.found {
+			if result.found { // Value found! Return immediately
 				return shortlist, result.value, true
 			}
-			if len(result.nodes) > 0 {
-				newNodes = append(newNodes, result.nodes...)
+			newNodes = append(newNodes, result.nodes...)
+		}
+
+		for _, node := range newNodes { // Add new nodes to shortlist
+			if !queried[node.Addr.String()] {
+				shortlist = append(shortlist, node)
 			}
-			value = result.value
-			found = result.found
-		}
-		if found {
-			return shortlist, value, true
 		}
 
-		// Merge nodes learned from responses
-		if len(newNodes) > 0 {
-			shortlist = append(shortlist, newNodes...)
-		}
-
-		// Also merge whatever the handlers might have added to the routing table
-		// during this round to keep discovery progressing even if a specific
-		// correlation-by-ID missed.
-		rtClosest := n.routing.GetKClosest(key, K*2)
-		if len(rtClosest) > 0 {
-			shortlist = append(shortlist, rtClosest...)
-		}
-
-		// De-duplicate by node ID
-		shortlist = dedupByID(shortlist)
-
-		// Re-sort by distance, then trim to K
-		shortlist = n.sortByDistance(key, shortlist)
+		shortlist = n.sortByDistance(key, shortlist) // Sort and trim
 		if len(shortlist) > K {
 			shortlist = shortlist[:K]
 		}
 	}
 
 	return shortlist, nil, false
-}
-
-func dedupByID(in []Triple) []Triple {
-	if len(in) == 0 {
-		return in
-	}
-	seen := make(map[string]struct{}, len(in))
-	out := make([]Triple, 0, len(in))
-	for _, t := range in {
-		k := fmt.Sprintf("%x", t.ID)
-		if _, ok := seen[k]; ok {
-			continue
-		}
-		seen[k] = struct{}{}
-		out = append(out, t)
-	}
-	return out
 }
 
 func (n *Node) sortByDistance(key string, nodes []Triple) []Triple {
@@ -177,47 +129,51 @@ type queryResult struct {
 }
 
 func (n *Node) queryNode(contact Triple, key string, findValue bool) queryResult {
-	msgType := "find_node"
+	var msgType string
 	if findValue {
 		msgType = "find_value"
+	} else {
+		msgType = "find_node"
 	}
 
-	// Correlation ID
+	// Generate unique correlation ID for this query
 	var correlationID [20]byte
-	_, _ = rand.Read(correlationID[:])
+	rand.Read(correlationID[:])
 
-	// Register waiter
-	respCh := make(chan Message, 1)
+	// Set up response channel before sending
+	responseChan := make(chan Message, 1)
 	n.pendingMu.Lock()
-	if n.pending == nil {
-		n.pending = make(map[[20]byte]chan Message)
-	}
-	n.pending[correlationID] = respCh
+	n.pending[correlationID] = responseChan
 	n.pendingMu.Unlock()
+
+	// Clean up on function exit
 	defer func() {
 		n.pendingMu.Lock()
 		delete(n.pending, correlationID)
 		n.pendingMu.Unlock()
 	}()
 
-	// Send request with ID + Type over the wire
-	out := Message{
+	// Create message with correlation ID
+	msg := Message{
 		ID:          correlationID,
-		Type:        msgType,
 		From:        n.Addr,
 		FromContact: Triple{ID: n.Id[:], Addr: n.Addr, Port: n.Addr.Port},
 		To:          contact.Addr,
+		Type:        msgType,
 		Payload:     []byte(key),
 		Network:     n.network,
 	}
-	if err := n.connection.Send(out); err != nil {
+
+	// Send the query
+	err := n.connection.Send(msg)
+	if err != nil {
 		return queryResult{found: false}
 	}
 
-	// Wait for the correlated response
+	// Wait for correlated response
 	select {
-	case resp := <-respCh:
-		return n.processQueryResponse(resp, findValue)
+	case responseMsg := <-responseChan:
+		return n.processQueryResponse(responseMsg, findValue)
 	case <-time.After(5 * time.Second):
 		fmt.Printf("Query to %s timed out\n", contact.Addr.String())
 		return queryResult{found: false}
@@ -234,7 +190,7 @@ func (n *Node) processQueryResponse(msg Message, findValue bool) queryResult {
 	}
 
 	// Parse as node list
-	nodes, err := TripleDeserialize(payload)
+	nodes, err := tripleDeserialize(payload)
 	if err != nil {
 		fmt.Printf("Error deserializing nodes: %v\n", err)
 		return queryResult{found: false, nodes: []Triple{}}

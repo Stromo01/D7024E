@@ -1,3 +1,4 @@
+// Add to test/cli_test/cli_test.go
 package cli_test
 
 import (
@@ -9,49 +10,158 @@ import (
 	. "github.com/eislab-cps/go-template/internal/cli"
 )
 
-func TestShowHelp(t *testing.T) {
+// Mock node for testing
+type MockNode struct {
+	storedData map[string][]byte
+}
+
+func (m *MockNode) IterativeStore(hash string, data []byte) {
+	if m.storedData == nil {
+		m.storedData = make(map[string][]byte)
+	}
+	m.storedData[hash] = data
+}
+
+func (m *MockNode) FindObject(hash string) ([]byte, string, bool) {
+	if data, exists := m.storedData[hash]; exists {
+		return data, "local", true
+	}
+	return nil, "", false
+}
+
+func (m *MockNode) Close() error {
+	return nil
+}
+
+func TestHandlePut(t *testing.T) {
 	// Capture stdout
-	oldStdout := os.Stdout
+	old := os.Stdout
 	r, w, _ := os.Pipe()
 	os.Stdout = w
 
-	ShowHelp()
+	// Set up mock node
+	mock := &MockNode{}
+	CurrentNode = mock
 
+	// Test HandlePut
+	testData := "test data"
+	HandlePut(testData)
+
+	// Restore stdout and read output
 	w.Close()
-	os.Stdout = oldStdout
-
+	os.Stdout = old
 	output, _ := io.ReadAll(r)
 	outputStr := string(output)
 
-	expectedCommands := []string{"put", "get", "help", "exit"}
-	for _, cmd := range expectedCommands {
-		if !strings.Contains(outputStr, cmd) {
-			t.Errorf("Help output should contain command: %s", cmd)
-		}
-	}
-
-	// Check for usage examples
-	if !strings.Contains(outputStr, "put <data>") {
-		t.Error("Help should show put usage")
-	}
-	if !strings.Contains(outputStr, "get <hash>") {
-		t.Error("Help should show get usage")
+	// Should output a hash
+	if !strings.Contains(outputStr, "2c26b46b68ffc68ff99b453c1d30413413422d706483bfa0f98a5e886266e7ae") {
+		t.Error("HandlePut should output correct hash for test data")
 	}
 }
 
-func TestCurrentNodeVariable(t *testing.T) {
-	// Test that currentNode can be set
-	testNode := "test-node"
-	CurrentNode = testNode
+func TestHandlePutNoNode(t *testing.T) {
+	// Capture stdout
+	old := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
 
-	if CurrentNode != testNode {
-		t.Error("currentNode should be settable")
-	}
-
-	// Clean up
+	// Clear current node
 	CurrentNode = nil
 
-	if CurrentNode != nil {
-		t.Error("CurrentNode should be nil after cleanup")
+	HandlePut("test")
+
+	w.Close()
+	os.Stdout = old
+	output, _ := io.ReadAll(r)
+
+	if !strings.Contains(string(output), "Error: No node available") {
+		t.Error("Should show error when no node available")
+	}
+}
+
+func TestHandleGet(t *testing.T) {
+	// Capture stdout
+	old := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
+	// Set up mock node with data
+	mock := &MockNode{
+		storedData: map[string][]byte{
+			"testhash": []byte("test data"),
+		},
+	}
+	CurrentNode = mock
+
+	HandleGet("testhash")
+
+	w.Close()
+	os.Stdout = old
+	output, _ := io.ReadAll(r)
+	outputStr := string(output)
+
+	if !strings.Contains(outputStr, "test data") {
+		t.Error("HandleGet should display found data")
+	}
+	if !strings.Contains(outputStr, "local") {
+		t.Error("HandleGet should display source")
+	}
+}
+
+func TestHandleGetNotFound(t *testing.T) {
+	old := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
+	mock := &MockNode{}
+	CurrentNode = mock
+
+	HandleGet("nonexistent")
+
+	w.Close()
+	os.Stdout = old
+	output, _ := io.ReadAll(r)
+
+	if !strings.Contains(string(output), "Error: Data not found") {
+		t.Error("Should show error when data not found")
+	}
+}
+
+func TestStartInteractiveCLI(t *testing.T) {
+	// Create a pipe to simulate user input
+	r, w, _ := os.Pipe()
+	oldStdin := os.Stdin
+	os.Stdin = r
+
+	// Capture stdout
+	oldStdout := os.Stdout
+	rOut, wOut, _ := os.Pipe()
+	os.Stdout = wOut
+
+	// Set up mock node
+	mock := &MockNode{}
+
+	// Write commands and close input
+	go func() {
+		w.WriteString("help\n")
+		w.WriteString("exit\n")
+		w.Close()
+	}()
+
+	// Run CLI
+	StartInteractiveCLI(mock)
+
+	// Restore and read output
+	os.Stdin = oldStdin
+	wOut.Close()
+	os.Stdout = oldStdout
+	output, _ := io.ReadAll(rOut)
+
+	outputStr := string(output)
+	if !strings.Contains(outputStr, "Kademlia CLI started") {
+		t.Error("Should show CLI start message")
+	}
+	if !strings.Contains(outputStr, "Available commands") {
+		t.Error("Should show help when help command is used")
 	}
 }

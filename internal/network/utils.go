@@ -10,10 +10,9 @@ import (
 
 // WireMessage is the serializable format for network transmission
 type WireMessage struct {
-	ID          [20]byte `json:"id"`
-	FromContact Triple   `json:"from_contact"`
-	Type        string   `json:"type"`
-	Payload     []byte   `json:"payload"`
+	FromContact Triple `json:"from_contact"`
+	Type        string `json:"type"`
+	Payload     []byte `json:"payload"`
 }
 
 // Message encoding/decoding functions
@@ -116,8 +115,7 @@ func SendPing(network Network, from, to Address) error {
 	msg := Message{
 		From:    from,
 		To:      to,
-		Type:    MsgPing,        // Use Type field
-		Payload: []byte("ping"), // Just the data
+		Payload: []byte(MsgPing + ":ping"),
 		Network: network,
 	}
 

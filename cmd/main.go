@@ -15,18 +15,6 @@ import (
 	. "github.com/eislab-cps/go-template/pkg/kademlia"
 )
 
-func outboundIP() string {
-	c, err := net.Dial("udp", "8.8.8.8:80")
-	if err != nil {
-		return "127.0.0.1"
-	}
-	defer c.Close()
-	if ua, ok := c.LocalAddr().(*net.UDPAddr); ok {
-		return ua.IP.String()
-	}
-	return "127.0.0.1"
-}
-
 func main() {
 	fmt.Print("Starting Kademlia node...\n")
 	node := startKademliaNode()
@@ -109,4 +97,16 @@ func startKademliaNode() *Node {
 
 	fmt.Printf("Node %s started successfully\n", advertiseAddr.String())
 	return node
+}
+
+func outboundIP() string {
+	c, err := net.Dial("udp", "8.8.8.8:80")
+	if err != nil {
+		return "127.0.0.1"
+	}
+	defer c.Close()
+	if ua, ok := c.LocalAddr().(*net.UDPAddr); ok {
+		return ua.IP.String()
+	}
+	return "127.0.0.1"
 }

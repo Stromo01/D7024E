@@ -10,9 +10,10 @@ import (
 
 // WireMessage is the serializable format for network transmission
 type WireMessage struct {
-	FromContact Triple `json:"from_contact"`
-	Type        string `json:"type"`
-	Payload     []byte `json:"payload"`
+	ID          [20]byte `json:"id"`
+	FromContact Triple   `json:"from_contact"`
+	Type        string   `json:"type"`
+	Payload     []byte   `json:"payload"`
 }
 
 // Message encoding/decoding functions

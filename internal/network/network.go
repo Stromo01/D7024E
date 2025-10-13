@@ -38,6 +38,7 @@ type Message struct {
 	From        Address
 	FromContact Triple
 	To          Address
+	Type        string
 	Payload     []byte
 	Network     Network
 }

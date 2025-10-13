@@ -15,7 +15,7 @@ func createRandomTriple() Triple {
 	rand.Read(id[:])
 	return Triple{
 		ID:   id[:],
-		Addr: Address{IP: "127.0.0.1", Port: 8000},
+		Addr: Address{IP: "127.0.0.1", Port: 8000},	
 		Port: 8000,
 	}
 }
@@ -102,7 +102,7 @@ func TestBucketAddContact(t *testing.T) {
 	}
 
 	// Verify it's at the front (index 0)
-	if !bytes.Equal(bucket.list[0].ID, triple.ID) {
+	if !bytes.Equal(bucket.List[0].ID, triple.ID) {
 		t.Error("Re-added contact should be moved to front")
 	}
 }
@@ -118,11 +118,11 @@ func TestBucketAddContactOrder(t *testing.T) {
 	bucket.AddContact(triple2)
 
 	// triple2 should be at front (index 0), triple1 at back (index 1)
-	if !bytes.Equal(bucket.list[0].ID, triple2.ID) {
+	if !bytes.Equal(bucket.List[0].ID, triple2.ID) {
 		t.Error("Most recently added contact should be at front")
 	}
 
-	if !bytes.Equal(bucket.list[1].ID, triple1.ID) {
+	if !bytes.Equal(bucket.List[1].ID, triple1.ID) {
 		t.Error("Less recently added contact should be at back")
 	}
 }
@@ -186,7 +186,7 @@ func TestBucketAddExistingContactToFull(t *testing.T) {
 	}
 
 	// Should be moved to front
-	if !bytes.Equal(bucket.list[0].ID, firstContact.ID) {
+	if !bytes.Equal(bucket.List[0].ID, firstContact.ID) {
 		t.Error("Re-added existing contact should be moved to front")
 	}
 }
@@ -330,9 +330,9 @@ func TestBucketGetAllContacts(t *testing.T) {
 	}
 
 	// Verify the contacts are copies
-	originalPort := bucket.list[0].Port
+	originalPort := bucket.List[0].Port
 	contacts[0].Port = 9999
-	if bucket.list[0].Port != originalPort {
+	if bucket.List[0].Port != originalPort {
 		t.Error("GetAllContacts should return copies, not references")
 	}
 
@@ -415,18 +415,18 @@ func TestBucketLRUBehavior(t *testing.T) {
 	bucket.AddContact(triple3) // Newest
 
 	// triple3 should be at front, triple1 at back
-	if !bytes.Equal(bucket.list[0].ID, triple3.ID) {
+	if !bytes.Equal(bucket.List[0].ID, triple3.ID) {
 		t.Error("Most recently added should be at front")
 	}
 
-	if !bytes.Equal(bucket.list[2].ID, triple1.ID) {
+	if !bytes.Equal(bucket.List[2].ID, triple1.ID) {
 		t.Error("Least recently added should be at back")
 	}
 
 	// Re-add triple1 (should move to front)
 	bucket.AddContact(triple1)
 
-	if !bytes.Equal(bucket.list[0].ID, triple1.ID) {
+	if !bytes.Equal(bucket.List[0].ID, triple1.ID) {
 		t.Error("Re-added contact should be moved to front")
 	}
 

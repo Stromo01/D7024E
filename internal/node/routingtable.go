@@ -29,7 +29,7 @@ func NewRoutingTable(Me Triple) *RoutingTable {
 	return rt
 }
 
-func (rt *RoutingTable) getKClosest(key string, K int) []Triple {
+func (rt *RoutingTable) GetKClosest(key string, K int) []Triple {
 	keyBytes := []byte(key)
 	type distTriple struct {
 		dist    *big.Int
@@ -39,7 +39,7 @@ func (rt *RoutingTable) getKClosest(key string, K int) []Triple {
 
 	for _, bucket := range rt.Buckets {
 		for _, contact := range bucket.List {
-			d := xorDistance(keyBytes, contact.ID)
+			d := XorDistance(keyBytes, contact.ID)
 			all = append(all, distTriple{dist: d, contact: *contact})
 		}
 	}
@@ -76,7 +76,7 @@ func (rt *RoutingTable) RemoveContact(contact Triple) {
 }
 
 func (routingTable *RoutingTable) GetBucketIndex(nodeID []byte) int {
-	distance := xorDistance(routingTable.Me.ID, nodeID)
+	distance := XorDistance(routingTable.Me.ID, nodeID)
 	// If distance is 0 (identical IDs), return bucket 0
 	if distance.Sign() == 0 {
 		return 0

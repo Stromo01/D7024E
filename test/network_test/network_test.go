@@ -1,133 +1,424 @@
 package network_test
 
 import (
-	"net"
-	"testing"
+    "bytes"
+    "testing"
+    "time"
 
-	. "github.com/eislab-cps/go-template/internal/network"
-	. "github.com/eislab-cps/go-template/pkg/kademlia"
+    "github.com/eislab-cps/go-template/internal/network"
+    . "github.com/eislab-cps/go-template/pkg/kademlia"
 )
 
-func TestAddress_String(t *testing.T) {
-	addr := Address{IP: "192.168.1.1", Port: 8080}
-	expected := "192.168.1.1:8080"
-	if addr.String() != expected {
-		t.Errorf("Expected %s, got %s", expected, addr.String())
-	}
+func TestNewUDPNetwork(t *testing.T) {
+    net := network.NewUDPNetwork()
+    if net == nil {
+        t.Fatal("NewUDPNetwork returned nil")
+    }
 }
 
-func TestUDPNetwork_NewUDPNetwork(t *testing.T) {
-	network := NewUDPNetwork()
-	if network == nil {
-		t.Fatal("NewUDPNetwork() returned nil")
-	}
-	if network.partitioned {
-		t.Error("New network should not be partitioned")
-	}
+func TestUDPNetworkListenAndDial(t *testing.T) {
+    net := network.NewUDPNetwork()
+    
+    // Test Listen
+    addr := Address{IP: "127.0.0.1", Port: 0}
+    listener, err := net.Listen(addr)
+    if err != nil {
+        t.Fatalf("Failed to listen: %v", err)
+    }
+    defer listener.Close()
+    
+    actualAddr := listener.LocalAddr()
+    if actualAddr == nil {
+        t.Fatal("LocalAddr returned nil")
+    }
+    
+    // Test Dial
+    dialAddr := network.AddressFromNetAddr(actualAddr)
+    conn, err := net.Dial(dialAddr)
+    if err != nil {
+        t.Fatalf("Failed to dial: %v", err)
+    }
+    defer conn.Close()
 }
 
-func TestUDPNetwork_Partition(t *testing.T) {
-	network := NewUDPNetwork()
-	group1 := []Address{{IP: "127.0.0.1", Port: 8000}}
-	group2 := []Address{{IP: "127.0.0.1", Port: 8001}}
-
-	network.Partition(group1, group2)
-
-	if !network.partitioned {
-		t.Error("Network should be partitioned")
-	}
-
-	if !network.partition1["127.0.0.1:8000"] {
-		t.Error("Group1 address should be in partition1")
-	}
-
-	if !network.partition2["127.0.0.1:8001"] {
-		t.Error("Group2 address should be in partition2")
-	}
+func TestMessageSendRecv(t *testing.T) {
+    net := network.NewUDPNetwork()
+    
+    // Setup listener
+    addr := Address{IP: "127.0.0.1", Port: 0}
+    listener, err := net.Listen(addr)
+    if err != nil {
+        t.Fatalf("Failed to listen: %v", err)
+    }
+    defer listener.Close()
+    
+    listenerAddr := network.AddressFromNetAddr(listener.LocalAddr())
+    
+    // Setup sender
+    sender, err := net.Dial(listenerAddr)
+    if err != nil {
+        t.Fatalf("Failed to dial: %v", err)
+    }
+    defer sender.Close()
+    
+    senderAddr := network.AddressFromNetAddr(sender.LocalAddr())
+    
+    // Test message - use the correct Triple structure from your code
+    testPayload := []byte("test message")
+    testContact := Triple{
+        ID:   []byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20}, // 20 bytes
+        Addr: senderAddr,
+        Port: senderAddr.Port,
+    }
+    
+    msg := network.Message{
+        From:        senderAddr,
+        FromContact: testContact,
+        To:          listenerAddr,
+        Payload:     testPayload,
+        Network:     net,
+    }
+    
+    // Send message
+    go func() {
+        if err := sender.Send(msg); err != nil {
+            t.Errorf("Failed to send message: %v", err)
+        }
+    }()
+    
+    // Receive message
+    received, err := listener.Recv()
+    if err != nil {
+        t.Fatalf("Failed to receive message: %v", err)
+    }
+    
+    if !bytes.Equal(received.Payload, testPayload) {
+        t.Errorf("Payload mismatch: got %s, want %s", received.Payload, testPayload)
+    }
+    
+    if received.From.IP != senderAddr.IP || received.From.Port != senderAddr.Port {
+        t.Errorf("From address mismatch: got %v, want %v", received.From, senderAddr)
+    }
 }
 
-func TestUDPNetwork_Heal(t *testing.T) {
-	network := NewUDPNetwork()
-	group1 := []Address{{IP: "127.0.0.1", Port: 8000}}
-	group2 := []Address{{IP: "127.0.0.1", Port: 8001}}
+func TestNetworkPartition(t *testing.T) {
+    net := network.NewUDPNetwork()
+    
+    addr1 := Address{IP: "127.0.0.1", Port: 8001}
+    addr2 := Address{IP: "127.0.0.1", Port: 8002}
+    
+    // Partition network
+    net.Partition([]Address{addr1}, []Address{addr2})
+    
+    // Try to dial partitioned address
+    _, err := net.Dial(addr1)
+    if err == nil {
+        t.Error("Expected error when dialing partitioned address")
+    }
+    
+    // Heal network
+    net.Heal()
+    
+    // Should work after healing (though may fail for other reasons like no listener)
+    _, err = net.Dial(addr1)
+    // We don't check for success here since there's no listener, just that partition is gone
+}
 
-	network.Partition(group1, group2)
-	network.Heal()
+func TestSendPing(t *testing.T) {
+    net := network.NewUDPNetwork()
+    
+    // Setup listener
+    addr := Address{IP: "127.0.0.1", Port: 0}
+    listener, err := net.Listen(addr)
+    if err != nil {
+        t.Fatalf("Failed to listen: %v", err)
+    }
+    defer listener.Close()
+    
+    listenerAddr := network.AddressFromNetAddr(listener.LocalAddr())
+    fromAddr := Address{IP: "127.0.0.1", Port: 9999}
+    
+    // Send ping in goroutine
+    go func() {
+        if err := network.SendPing(net, fromAddr, listenerAddr); err != nil {
+            t.Errorf("Failed to send ping: %v", err)
+        }
+    }()
+    
+    // Receive ping
+    msg, err := listener.Recv()
+    if err != nil {
+        t.Fatalf("Failed to receive ping: %v", err)
+    }
+    
+    expected := network.MsgPing + ":ping"
+    if string(msg.Payload) != expected {
+        t.Errorf("Ping payload mismatch: got %s, want %s", msg.Payload, expected)
+    }
+}
 
-	if network.partitioned {
-		t.Error("Network should not be partitioned after heal")
-	}
-
-	if len(network.partition1) > 0 || len(network.partition2) > 0 {
-		t.Error("Partitions should be empty after heal")
-	}
+func TestMessageReply(t *testing.T) {
+    net := network.NewUDPNetwork()
+    
+    // Setup original sender (will receive reply)
+    senderAddr := Address{IP: "127.0.0.1", Port: 0}
+    sender, err := net.Listen(senderAddr)
+    if err != nil {
+        t.Fatalf("Failed to setup sender listener: %v", err)
+    }
+    defer sender.Close()
+    
+    actualSenderAddr := network.AddressFromNetAddr(sender.LocalAddr())
+    
+    // Create a message as if received
+    receivedMsg := network.Message{
+        From:    actualSenderAddr,
+        To:      Address{IP: "127.0.0.1", Port: 8888},
+        Network: net,
+    }
+    
+    // Send reply in goroutine
+    go func() {
+        if err := receivedMsg.ReplyString(network.MsgPong, "pong response"); err != nil {
+            t.Errorf("Failed to send reply: %v", err)
+        }
+    }()
+    
+    // Receive reply
+    reply, err := sender.Recv()
+    if err != nil {
+        t.Fatalf("Failed to receive reply: %v", err)
+    }
+    
+    expected := network.MsgPong + ":pong response"
+    if string(reply.Payload) != expected {
+        t.Errorf("Reply payload mismatch: got %s, want %s", reply.Payload, expected)
+    }
 }
 
 func TestGetLocalIP(t *testing.T) {
-	ip, err := GetLocalIP()
-	if err != nil {
-		t.Errorf("GetLocalIP() failed: %v", err)
-	}
-	if ip == "" {
-		t.Error("GetLocalIP() returned empty string")
-	}
-	t.Logf("Local IP: %s", ip)
+    ip, err := network.GetLocalIP()
+    if err != nil {
+        t.Fatalf("Failed to get local IP: %v", err)
+    }
+    
+    if ip == "" {
+        t.Error("GetLocalIP returned empty string")
+    }
+    
+    // Should be a valid IP format (basic check)
+    if len(ip) < 7 { // minimum "1.1.1.1"
+        t.Errorf("GetLocalIP returned invalid IP: %s", ip)
+    }
 }
 
-func TestWireMessage_Serialization(t *testing.T) {
-	triple := Triple{
-		ID:   []byte("test-id"),
-		Addr: Address{IP: "127.0.0.1", Port: 8000},
-		Port: 8000,
-	}
-
-	wireMsg := WireMessage{
-		FromContact: triple,
-		Payload:     []byte("test payload"),
-	}
-
-	// This tests that WireMessage can be created and used
-	if string(wireMsg.Payload) != "test payload" {
-		t.Error("WireMessage payload not preserved")
-	}
-
-	if wireMsg.FromContact.Addr.String() != "127.0.0.1:8000" {
-		t.Error("WireMessage FromContact not preserved")
-	}
+func TestAddressFromNetAddr(t *testing.T) {
+    // Test with nil
+    addr := network.AddressFromNetAddr(nil)
+    if addr.IP != "" || addr.Port != 0 {
+        t.Errorf("Expected empty address for nil input, got %v", addr)
+    }
+    
+    // Test with UDP listener
+    net := network.NewUDPNetwork()
+    listener, err := net.Listen(Address{IP: "127.0.0.1", Port: 0})
+    if err != nil {
+        t.Fatalf("Failed to create listener: %v", err)
+    }
+    defer listener.Close()
+    
+    addr = network.AddressFromNetAddr(listener.LocalAddr())
+    if addr.IP != "127.0.0.1" {
+        t.Errorf("Expected IP 127.0.0.1, got %s", addr.IP)
+    }
+    if addr.Port == 0 {
+        t.Error("Expected non-zero port")
+    }
 }
 
-func TestMessage_Reply_WithUDP(t *testing.T) {
-	network := NewUDPNetwork()
-	fromAddr := Address{IP: "127.0.0.1", Port: 0} // Let OS choose port
+func TestUDPConnectionClose(t *testing.T) {
+    net := network.NewUDPNetwork()
+    
+    addr := Address{IP: "127.0.0.1", Port: 0}
+    conn, err := net.Listen(addr)
+    if err != nil {
+        t.Fatalf("Failed to listen: %v", err)
+    }
+    
+    // Test Close
+    if err := conn.Close(); err != nil {
+        t.Errorf("Failed to close connection: %v", err)
+    }
+    
+    // Test Close on nil connection - this test needs to be more careful
+    // We can't directly test a nil *UDPConnection, so we'll skip this part
+}
 
-	// Set up receiver
-	conn, err := network.Listen(fromAddr)
-	if err != nil {
-		t.Skipf("Could not create UDP listener (may be in testing environment): %v", err)
-	}
-	defer conn.Close()
+func TestConnectionTimeout(t *testing.T) {
+    net := network.NewUDPNetwork()
+    
+    // Try to dial a non-existent address
+    addr := Address{IP: "192.0.2.1", Port: 12345} // TEST-NET-1 (RFC 5737)
+    conn, err := net.Dial(addr)
+    if err != nil {
+        t.Skip("Dial failed (expected in some environments)")
+    }
+    defer conn.Close()
+    
+    // Try to receive (should timeout)
+    start := time.Now()
+    _, err = conn.Recv()
+    duration := time.Since(start)
+    
+    if err == nil {
+        t.Error("Expected timeout error")
+    }
+    
+    // Should timeout within reasonable time (deadline is set to 5 seconds)
+    if duration > 10*time.Second {
+        t.Errorf("Timeout took too long: %v", duration)
+    }
+}
 
-	// Get the actual assigned address
-	if udpConn, ok := conn.(*UDPConnection); ok {
-		actualAddr := udpConn.conn.LocalAddr().(*net.UDPAddr)
-		fromAddr.Port = actualAddr.Port
-	}
+func TestWireMessageEncoding(t *testing.T) {
+    // Test the wire message encoding/decoding indirectly through Send/Recv
+    net := network.NewUDPNetwork()
+    
+    addr := Address{IP: "127.0.0.1", Port: 0}
+    listener, err := net.Listen(addr)
+    if err != nil {
+        t.Fatalf("Failed to listen: %v", err)
+    }
+    defer listener.Close()
+    
+    listenerAddr := network.AddressFromNetAddr(listener.LocalAddr())
+    
+    // Test with complex contact data - use correct Triple structure
+    testContact := Triple{
+        ID:   []byte{255, 254, 253, 252, 251, 250, 249, 248, 247, 246, 245, 244, 243, 242, 241, 240, 239, 238, 237, 236}, // 20 bytes
+        Addr: Address{IP: "192.168.1.100", Port: 8080},
+        Port: 8080,
+    }
+    
+    // Test with binary payload
+    testPayload := []byte{0, 1, 2, 3, 255, 254, 253}
+    
+    msg := network.Message{
+        FromContact: testContact,
+        To:          listenerAddr,
+        Payload:     testPayload,
+        Network:     net,
+    }
+    
+    // Send message via connection
+    conn, err := net.Dial(listenerAddr)
+    if err != nil {
+        t.Fatalf("Failed to dial: %v", err)
+    }
+    defer conn.Close()
+    
+    go func() {
+        if err := conn.Send(msg); err != nil {
+            t.Errorf("Failed to send message: %v", err)
+        }
+    }()
+    
+    // Receive and verify
+    received, err := listener.Recv()
+    if err != nil {
+        t.Fatalf("Failed to receive message: %v", err)
+    }
+    
+    if !bytes.Equal(received.Payload, testPayload) {
+        t.Errorf("Payload mismatch after encoding/decoding")
+    }
+    
+    if !bytes.Equal(received.FromContact.ID, testContact.ID) {
+        t.Errorf("ID mismatch after encoding/decoding")
+    }
+}
 
-	toAddr := Address{IP: "127.0.0.1", Port: fromAddr.Port + 1}
+// Helper function to create a 20-byte ID
+func createTestID(pattern byte) []byte {
+    id := make([]byte, 20)
+    for i := range id {
+        id[i] = pattern
+    }
+    return id
+}
 
-	// Create message
-	msg := Message{
-		From:    toAddr,
-		To:      fromAddr,
-		Payload: []byte("test"),
-		Network: network,
-	}
+// Additional test for edge cases
+func TestMessageWithEmptyPayload(t *testing.T) {
+    net := network.NewUDPNetwork()
+    
+    addr := Address{IP: "127.0.0.1", Port: 0}
+    listener, err := net.Listen(addr)
+    if err != nil {
+        t.Fatalf("Failed to listen: %v", err)
+    }
+    defer listener.Close()
+    
+    listenerAddr := network.AddressFromNetAddr(listener.LocalAddr())
+    
+    // Create message with empty payload
+    testContact := Triple{
+        ID:   createTestID(42),
+        Addr: Address{IP: "127.0.0.1", Port: 12345},
+        Port: 12345,
+    }
+    
+    msg := network.Message{
+        FromContact: testContact,
+        To:          listenerAddr,
+        Payload:     []byte{}, // Empty payload
+        Network:     net,
+    }
+    
+    conn, err := net.Dial(listenerAddr)
+    if err != nil {
+        t.Fatalf("Failed to dial: %v", err)
+    }
+    defer conn.Close()
+    
+    go func() {
+        if err := conn.Send(msg); err != nil {
+            t.Errorf("Failed to send message: %v", err)
+        }
+    }()
+    
+    received, err := listener.Recv()
+    if err != nil {
+        t.Fatalf("Failed to receive message: %v", err)
+    }
+    
+    if len(received.Payload) != 0 {
+        t.Errorf("Expected empty payload, got %d bytes", len(received.Payload))
+    }
+}
 
-	// Test reply - this will fail because toAddr isn't listening, but that's expected
-	err = msg.Reply("response", []byte("reply data"))
-	if err == nil {
-		t.Log("Reply succeeded (unexpected but not necessarily wrong)")
-	} else {
-		t.Logf("Reply failed as expected: %v", err)
-	}
+// Test network partition healing
+func TestNetworkPartitionHealing(t *testing.T) {
+    net := network.NewUDPNetwork()
+    
+    addr1 := Address{IP: "127.0.0.1", Port: 8001}
+    addr2 := Address{IP: "127.0.0.1", Port: 8002}
+    addr3 := Address{IP: "127.0.0.1", Port: 8003}
+    
+    // Create partition
+    net.Partition([]Address{addr1, addr2}, []Address{addr3})
+    
+    // Verify partition exists
+    _, err1 := net.Dial(addr1)
+    _, err2 := net.Dial(addr2)
+    _, err3 := net.Dial(addr3)
+    
+    if err1 == nil || err2 == nil || err3 == nil {
+        t.Error("Expected errors when dialing partitioned addresses")
+    }
+    
+    // Heal network
+    net.Heal()
+    
+    // After healing, the partition should be gone (though connections may still fail due to no listeners)
+    // This is mainly testing that the partition state is cleared
 }

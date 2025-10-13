@@ -217,7 +217,7 @@ func TestRoutingTableGetKClosest(t *testing.T) {
 	}
 
 	targetKey := "test_key"
-	closest := rt.getKClosest(targetKey, 5)
+	closest := rt.GetKClosest(targetKey, 5)
 
 	if len(closest) > 5 {
 		t.Errorf("Expected at most 5 closest contacts, got %d", len(closest))
@@ -231,8 +231,8 @@ func TestRoutingTableGetKClosest(t *testing.T) {
 	if len(closest) > 1 {
 		keyBytes := []byte(targetKey)
 		for i := 1; i < len(closest); i++ {
-			dist1 := xorDistance(keyBytes, closest[i-1].ID)
-			dist2 := xorDistance(keyBytes, closest[i].ID)
+			dist1 := XorDistance(keyBytes, closest[i-1].ID)
+			dist2 := XorDistance(keyBytes, closest[i].ID)
 			if dist1.Cmp(dist2) > 0 {
 				t.Error("Results should be sorted by distance (closest first)")
 			}
@@ -244,7 +244,7 @@ func TestRoutingTableGetKClosestEmptyTable(t *testing.T) {
 	Me := createRandomTriple()
 	rt := NewRoutingTable(Me)
 
-	closest := rt.getKClosest("test_key", 5)
+	closest := rt.GetKClosest("test_key", 5)
 
 	if len(closest) != 0 {
 		t.Errorf("Expected empty result for empty routing table, got %d contacts", len(closest))
@@ -262,7 +262,7 @@ func TestRoutingTableGetKClosestMoreThanAvailable(t *testing.T) {
 	}
 
 	// Request 10 closest (more than available)
-	closest := rt.getKClosest("test_key", 10)
+	closest := rt.GetKClosest("test_key", 10)
 
 	if len(closest) != 3 {
 		t.Errorf("Expected 3 contacts (all available), got %d", len(closest))
@@ -276,7 +276,7 @@ func TestRoutingTableGetKClosestSingleContact(t *testing.T) {
 	contact := createRandomTriple()
 	rt.AddContact(contact)
 
-	closest := rt.getKClosest("test_key", 5)
+	closest := rt.GetKClosest("test_key", 5)
 
 	if len(closest) != 1 {
 		t.Errorf("Expected 1 contact, got %d", len(closest))
@@ -294,7 +294,7 @@ func TestRoutingTableGetKClosestZeroK(t *testing.T) {
 	contact := createRandomTriple()
 	rt.AddContact(contact)
 
-	closest := rt.getKClosest("test_key", 0)
+	closest := rt.GetKClosest("test_key", 0)
 
 	if len(closest) != 0 {
 		t.Errorf("Expected 0 contacts when K=0, got %d", len(closest))
@@ -408,7 +408,7 @@ func TestRoutingTableIntegrationWithBucket(t *testing.T) {
 	rt.AddContact(contact2)
 
 	// Get K closest and verify they're included
-	closest := rt.getKClosest("test_key", 10)
+	closest := rt.GetKClosest("test_key", 10)
 
 	found1, found2 := false, false
 	for _, c := range closest {
@@ -428,7 +428,7 @@ func TestRoutingTableIntegrationWithBucket(t *testing.T) {
 	rt.RemoveContact(contact1)
 
 	// Verify it's no longer in K closest
-	closest = rt.getKClosest("test_key", 10)
+	closest = rt.GetKClosest("test_key", 10)
 
 	found1 = false
 	for _, c := range closest {
@@ -443,7 +443,7 @@ func TestRoutingTableIntegrationWithBucket(t *testing.T) {
 
 	// Re-add and verify it's back
 	rt.AddContact(contact1)
-	closest = rt.getKClosest("test_key", 10)
+	closest = rt.GetKClosest("test_key", 10)
 
 	found1 = false
 	for _, c := range closest {
@@ -462,7 +462,7 @@ func TestXorDistanceFunctionForRouting(t *testing.T) {
 	a := []byte{0x00, 0x00}
 	b := []byte{0x00, 0x01}
 
-	distance := xorDistance(a, b)
+	distance := XorDistance(a, b)
 	expected := big.NewInt(1)
 
 	if distance.Cmp(expected) != 0 {
@@ -470,15 +470,15 @@ func TestXorDistanceFunctionForRouting(t *testing.T) {
 	}
 
 	// Test XOR distance is symmetric
-	distance1 := xorDistance(a, b)
-	distance2 := xorDistance(b, a)
+	distance1 := XorDistance(a, b)
+	distance2 := XorDistance(b, a)
 
 	if distance1.Cmp(distance2) != 0 {
 		t.Error("XOR distance should be symmetric")
 	}
 
 	// Test XOR distance to self is 0
-	distance = xorDistance(a, a)
+	distance = XorDistance(a, a)
 	if distance.Sign() != 0 {
 		t.Error("XOR distance to self should be 0")
 	}
@@ -498,7 +498,7 @@ func TestRoutingTableStressTest(t *testing.T) {
 	}
 
 	// Verify we can still get K closest without errors
-	closest := rt.getKClosest("stress_test_key", K)
+	closest := rt.GetKClosest("stress_test_key", K)
 
 	if len(closest) == 0 && numContacts > 0 {
 		t.Error("Should be able to find contacts in stress test")
@@ -508,8 +508,8 @@ func TestRoutingTableStressTest(t *testing.T) {
 	if len(closest) > 1 {
 		keyBytes := []byte("stress_test_key")
 		for i := 1; i < len(closest); i++ {
-			dist1 := xorDistance(keyBytes, closest[i-1].ID)
-			dist2 := xorDistance(keyBytes, closest[i].ID)
+			dist1 := XorDistance(keyBytes, closest[i-1].ID)
+			dist2 := XorDistance(keyBytes, closest[i].ID)
 			if dist1.Cmp(dist2) > 0 {
 				t.Error("Distance ordering not maintained in stress test")
 			}

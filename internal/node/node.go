@@ -38,7 +38,7 @@ const K = 8     // Kademlia bucket size and number of closest nodes to return
 const Alpha = 3 // Concurrency in lookups
 
 // XOR distance between two keys (as hex strings)
-func xorDistance(a, b []byte) *big.Int {
+func XorDistance(a, b []byte) *big.Int {
 	aInt := new(big.Int).SetBytes(a)
 	bInt := new(big.Int).SetBytes(b)
 	return new(big.Int).Xor(aInt, bInt)
@@ -50,7 +50,7 @@ func (n *Node) StoreAtK(key string, value []byte, k int) error {
 	n.StoreObject(key, value)
 
 	// Find K closest nodes
-	closest := n.routing.getKClosest(key, k)
+	closest := n.routing.GetKClosest(key, k)
 
 	var wg sync.WaitGroup
 	errors := make(chan error, len(closest))
@@ -125,6 +125,9 @@ func NewNode(network Network, addr Address) (*Node, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to create node: %v", err)
 	}
+
+	actualAddr := AddressFromNetAddr(connection.LocalAddr())
+
 	var id [20]byte
 	_, err = rand.Read(id[:])
 	if err != nil {
@@ -132,12 +135,13 @@ func NewNode(network Network, addr Address) (*Node, error) {
 	}
 	node := &Node{
 		Id:         id,
-		Addr:       addr,
+		Addr:       actualAddr,
 		network:    network,
 		connection: connection,
 		handlers:   make(map[string]MessageHandler),
-		routing:    NewRoutingTable(Triple{ID: id[:], Addr: addr, Port: addr.Port}),
+		routing:    NewRoutingTable(Triple{ID: id[:], Addr: actualAddr, Port: actualAddr.Port}),
 		store:      make(map[string][]byte),
+		pending:    make(map[[20]byte]chan Message),
 	}
 
 	// Register STORE handler to accept and store objects
@@ -197,7 +201,7 @@ func NewNode(network Network, addr Address) (*Node, error) {
 	node.Handle("find_node", func(msg Message) error {
 		// Expect payload as "key"
 		key := string(msg.Payload)
-		closest := node.routing.getKClosest(key, K)
+		closest := node.routing.GetKClosest(key, K)
 		var respPayload = tripleSerialize(closest)
 		return node.Send(msg.From, "find_node_response", []byte(respPayload))
 	})
@@ -230,7 +234,7 @@ func NewNode(network Network, addr Address) (*Node, error) {
 			return node.Send(msg.From, "find_value_response", []byte("VALUE:"+string(val)))
 		} else {
 			// Return closest nodes
-			closest := node.routing.getKClosest(key, K)
+			closest := node.routing.GetKClosest(key, K)
 			respPayload := tripleSerialize(closest)
 			return node.Send(msg.From, "find_value_response", []byte(respPayload))
 		}
@@ -242,8 +246,8 @@ func (n *Node) sortByDistance(key string, nodes []Triple) []Triple {
 	keyBytes := []byte(key)
 
 	sort.Slice(nodes, func(i, j int) bool {
-		distI := xorDistance(keyBytes, nodes[i].ID)
-		distJ := xorDistance(keyBytes, nodes[j].ID)
+		distI := XorDistance(keyBytes, nodes[i].ID)
+		distJ := XorDistance(keyBytes, nodes[j].ID)
 		return distI.Cmp(distJ) < 0
 	})
 
@@ -297,7 +301,7 @@ func tripleDeserialize(s string) ([]Triple, error) {
 
 func (n *Node) iterativeFindValue(key string) ([]byte, bool) {
 	// Start with K closest nodes from routing table
-	shortlist := n.routing.getKClosest(key, K)
+	shortlist := n.routing.GetKClosest(key, K)
 	queried := make(map[string]bool)
 
 	for len(shortlist) > 0 {
@@ -467,7 +471,7 @@ func tripleSerialize(triples []Triple) string {
 }
 
 func (n *Node) nodeLookup(key string) []Triple {
-	shortlist := n.routing.getKClosest(key, K)
+	shortlist := n.routing.GetKClosest(key, K)
 	queried := make(map[string]bool)
 
 	for {
@@ -564,9 +568,9 @@ func (n *Node) searchShortlist(key string, shortlist []Triple, responses chan []
 func sortAndTrim(key string, nodes []Triple) []Triple {
 	var nodeDistance []Triple
 	for _, node := range nodes {
-		distance := xorDistance([]byte(key), node.ID)
+		distance := XorDistance([]byte(key), node.ID)
 		for i, nd := range nodeDistance {
-			if distance.Cmp(xorDistance([]byte(key), nd.ID)) == -1 {
+			if distance.Cmp(XorDistance([]byte(key), nd.ID)) == -1 {
 				nodeDistance = append(nodeDistance[:i], append([]Triple{node}, nodeDistance[i:]...)...)
 				break
 			}
@@ -717,10 +721,12 @@ func (n *Node) Send(to Address, msgType string, data []byte) error {
 		payload = data
 	}
 
+	actualAddr := AddressFromNetAddr(n.connection.LocalAddr())
+
 	// Create the message with proper FromContact
 	msg := Message{
-		From:        n.Addr,
-		FromContact: Triple{ID: n.Id[:], Addr: n.Addr, Port: n.Addr.Port},
+		From:        actualAddr,
+		FromContact: Triple{ID: n.Id[:], Addr: actualAddr, Port: actualAddr.Port},
 		To:          to,
 		Payload:     payload,
 		Network:     n.network,

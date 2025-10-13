@@ -40,7 +40,10 @@ func (n *Node) nodeLookup(key string, findValue ...bool) ([]Triple, []byte, bool
 	queried := make(map[string]bool)
 
 	for {
-		fmt.Printf("Shortlist: %s\n", shortlist)
+		fmt.Printf("Shortlist: \n")
+		for _, node := range shortlist {
+			fmt.Printf(node.String() + "\n")
+		}
 		toQuery := make([]Triple, 0, Alpha) // Select up to Alpha unqueried nodes
 		for _, contact := range shortlist {
 			if !queried[contact.Addr.String()] && len(toQuery) < Alpha {

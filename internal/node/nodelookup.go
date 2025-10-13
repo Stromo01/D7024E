@@ -20,15 +20,22 @@ func (n *Node) iterativeFindValue(key string) ([]byte, bool) {
 
 func (n *Node) iterativeFindNode(key string) []Triple {
 	nodes, _, _ := n.nodeLookup(key, false)
-	fmt.Printf("Found nodes for key %s: %s\n", key, nodes)
+	fmt.Printf("----------\n")
+	fmt.Printf("Found nodes for key %s: \n", key)
+	for _, node := range nodes {
+		fmt.Printf(" - %s\n", node.Addr.String())
+	}
+	fmt.Printf("----------\n")
 	return nodes
 }
 func (n *Node) IterativeStore(key string, value []byte) {
 	var nodes []Triple = n.iterativeFindNode(key)
+	fmt.Printf("----------\n")
 	fmt.Printf("Storing key %s at nodes: ", key)
 	for _, node := range nodes {
 		fmt.Printf("%s ", node.Addr.String())
 	}
+	fmt.Printf("----------\n")
 	for _, node := range nodes {
 		payload := fmt.Sprintf("%s:%s", key, string(value))
 		err := n.Send(node.Addr, "store", []byte(payload))
@@ -47,10 +54,12 @@ func (n *Node) nodeLookup(key string, findValue ...bool) ([]Triple, []byte, bool
 	queried := make(map[string]bool)
 
 	for {
+		fmt.Printf("----------\n")
 		fmt.Printf("New iteration of nodeLookup.Shortlist: \n")
 		for _, node := range shortlist {
 			fmt.Printf(node.String() + "\n")
 		}
+		fmt.Printf("----------\n")
 		toQuery := make([]Triple, 0, Alpha) // Select up to Alpha unqueried nodes
 		for _, contact := range shortlist {
 			if !queried[contact.Addr.String()] && len(toQuery) < Alpha {

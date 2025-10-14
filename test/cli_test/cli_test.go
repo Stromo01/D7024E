@@ -54,7 +54,6 @@ func TestHandlePut(t *testing.T) {
 	output, _ := io.ReadAll(r)
 	outputStr := string(output)
 
-	// Fix: Use the correct SHA-1 hash for "test data"
 	// SHA-1 of "test data" is: f48dd853820860816c75d54d0f584dc863327a7c
 	expectedHash := "f48dd853820860816c75d54d0f584dc863327a7c"
 	if !strings.Contains(outputStr, expectedHash) {

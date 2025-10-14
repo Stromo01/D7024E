@@ -271,7 +271,7 @@ func TestNetworkEmulation1000NodesWithPacketDrop(t *testing.T) {
 		t.Logf("WARNING: No messages were sent through the network - this might indicate a setup issue")
 		// Don't fail the test - just warn
 	} else {
-		t.Logf("✅ Messages were successfully sent through the network")
+		t.Logf("Messages were successfully sent through the network")
 	}
 
 	// Packet dropping verification

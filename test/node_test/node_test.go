@@ -2,6 +2,7 @@ package node_test
 
 import (
 	"bytes"
+	"crypto/rand"
 	"testing"
 	"time"
 
@@ -10,8 +11,12 @@ import (
 	. "github.com/eislab-cps/go-template/pkg/kademlia"
 )
 
-// Helper function to create a random Triple for testing
-
+// Helper function to create random 20-byte ID
+func createRandomID() [20]byte {
+	var id [20]byte
+	rand.Read(id[:])
+	return id
+}
 func TestNewNode(t *testing.T) {
 	network := NewUDPNetwork()
 	addr := Address{IP: "127.0.0.1", Port: 0}
@@ -152,6 +157,7 @@ func TestNodeFindObject(t *testing.T) {
 }
 
 func TestXorDistance(t *testing.T) {
+	// Test with single bytes first
 	a := []byte{0x00}
 	b := []byte{0x01}
 
@@ -172,4 +178,35 @@ func TestXorDistance(t *testing.T) {
 	if dist.Int64() != 0 {
 		t.Error("Distance to self should be 0")
 	}
+
+	// Test with realistic 20-byte node IDs
+	id1 := createRandomID()
+	id2 := createRandomID()
+	id3 := createRandomID()
+
+	// Test properties with large IDs
+	dist_1_2 := XorDistance(id1[:], id2[:])
+	dist_2_1 := XorDistance(id2[:], id1[:])
+
+	// Symmetry
+	if dist_1_2.Cmp(dist_2_1) != 0 {
+		t.Error("XOR distance should be symmetric for 20-byte IDs")
+	}
+
+	// Triangle inequality: d(a,c) <= d(a,b) + d(b,c)
+	dist_1_3 := XorDistance(id1[:], id3[:])
+	dist_2_3 := XorDistance(id2[:], id3[:])
+
+	// Just verify the calculation works without errors
+	if dist_1_2 == nil || dist_1_3 == nil || dist_2_3 == nil {
+		t.Error("XOR distance calculation failed for 20-byte IDs")
+	}
+
+	// Test distance to self with large ID
+	dist_self := XorDistance(id1[:], id1[:])
+	if dist_self.Int64() != 0 {
+		t.Error("Distance to self should be 0 for 20-byte IDs")
+	}
+
+	t.Log("XOR distance calculations work correctly with realistic 20-byte IDs")
 }

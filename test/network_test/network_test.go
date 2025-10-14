@@ -190,7 +190,7 @@ func TestMessageReply(t *testing.T) {
 		t.Fatalf("Failed to receive reply: %v", err)
 	}
 
-	// FIX: Check Type and Payload separately (based on your Message.Reply implementation)
+	// Check Type and Payload separately (based on your Message.Reply implementation)
 	if reply.Type != network.MsgPong {
 		t.Errorf("Expected type %s, got %s", network.MsgPong, reply.Type)
 	}

@@ -31,7 +31,6 @@ func NewRoutingTable(Me Triple) *RoutingTable {
 }
 
 func (rt *RoutingTable) GetKClosest(key string, K int) []Triple {
-	// Read lock for accessing buckets
 	rt.mu.RLock()
 	defer rt.mu.RUnlock()
 
@@ -49,12 +48,12 @@ func (rt *RoutingTable) GetKClosest(key string, K int) []Triple {
 		}
 	}
 
-	sort.Slice(all, func(i, j int) bool {
+	sort.Slice(all, func(i, j int) bool { // Sort by distance
 		return all[i].dist.Cmp(all[j].dist) < 0
 	})
 
 	var result []Triple
-	for i := 0; i < len(all) && i < K; i++ {
+	for i := 0; i < len(all) && i < K; i++ { // Take the K closest
 		result = append(result, all[i].contact)
 	}
 	return result
@@ -86,23 +85,16 @@ func (rt *RoutingTable) RemoveContact(contact Triple) {
 	bucketIndex := rt.GetBucketIndex(contact.ID)
 	bucket := rt.Buckets[bucketIndex]
 	bucket.RemoveContact(contact)
-	// bucket := rt.Buckets[bucketI] // Uncomment and use as needed
-	// rt.insertContact(distance, contact) // Update as needed
-
 }
 
 func (routingTable *RoutingTable) GetBucketIndex(nodeID []byte) int {
 	distance := XorDistance(routingTable.Me.ID, nodeID)
-	// If distance is 0 (identical IDs), return bucket 0
-	if distance.Sign() == 0 {
+	if distance.Sign() == 0 { // If distance is 0 (identical IDs), return bucket 0
 		return 0
 	}
 
-	// Calculate bucket index based on the position of the most significant bit
-	// BitLen() returns the number of bits needed to represent the number
-	// For Kademlia, we want bucket 0 for the closest nodes (smallest distances)
-	bitLen := distance.BitLen()
-	index := bitLen - 1
+	bitLen := distance.BitLen() // Number of bits needed to represent the distance
+	index := bitLen - 1         // MSB position
 
 	// Ensure index is within valid range [0, IDLength*8-1]
 	if index < 0 {

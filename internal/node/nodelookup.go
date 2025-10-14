@@ -47,16 +47,43 @@ func (n *Node) IterativeStore(key string, value []byte) {
 	}
 }
 
+func dedupByID(in []Triple) []Triple {
+	if len(in) == 0 {
+		return in
+	}
+	seen := make(map[string]struct{}, len(in))
+	out := make([]Triple, 0, len(in))
+	for _, t := range in {
+		k := fmt.Sprintf("%x", t.ID)
+		if _, ok := seen[k]; ok {
+			continue
+		}
+		seen[k] = struct{}{}
+		out = append(out, t)
+	}
+	return out
+}
+
+func (n *Node) sortByDistance(key string, nodes []Triple) []Triple {
+	keyBytes := []byte(key)
+
+	sort.Slice(nodes, func(i, j int) bool {
+		distI := XorDistance(keyBytes, nodes[i].ID)
+		distJ := XorDistance(keyBytes, nodes[j].ID)
+		return distI.Cmp(distJ) < 0
+	})
+
+	return nodes
+}
+
 // NodeLookup
 func (n *Node) nodeLookup(key string, findValue ...bool) ([]Triple, []byte, bool) {
 	isValueSearch := len(findValue) > 0 && findValue[0]
 
-	// Initial shortlist
-	shortlist := n.routing.GetKClosest(key, K)
-	shortlist = dedupByID(shortlist)
+	shortlist := n.routing.GetKClosest(key, K) // List of known closest nodes
+	shortlist = dedupByID(shortlist)           // Remove duplicates
 
-	// Track queried nodes by address string
-	queried := make(map[string]bool, len(shortlist))
+	queried := make(map[string]bool, len(shortlist)) // Track queried nodes by address string
 
 	for {
 		fmt.Printf("----------\n")
@@ -66,9 +93,8 @@ func (n *Node) nodeLookup(key string, findValue ...bool) ([]Triple, []byte, bool
 		}
 		fmt.Printf("----------\n")
 
-		// Select up to Alpha unqueried nodes
 		toQuery := make([]Triple, 0, Alpha)
-		for _, c := range shortlist {
+		for _, c := range shortlist { // Select up to Alpha unqueried nodes
 			if !queried[c.Addr.String()] && len(toQuery) < Alpha {
 				toQuery = append(toQuery, c)
 				queried[c.Addr.String()] = true
@@ -102,16 +128,16 @@ func (n *Node) nodeLookup(key string, findValue ...bool) ([]Triple, []byte, bool
 		)
 
 		for result := range resultsChan {
-			if result.found {
+			if result.found { // Value found
 				return shortlist, result.value, true
 			}
-			if len(result.nodes) > 0 {
+			if len(result.nodes) > 0 { // New nodes learned
 				newNodes = append(newNodes, result.nodes...)
 			}
 			value = result.value
 			found = result.found
 		}
-		if found {
+		if found { //Needed for var definition
 			return shortlist, value, true
 		}
 
@@ -141,35 +167,6 @@ func (n *Node) nodeLookup(key string, findValue ...bool) ([]Triple, []byte, bool
 	return shortlist, nil, false
 }
 
-func dedupByID(in []Triple) []Triple {
-	if len(in) == 0 {
-		return in
-	}
-	seen := make(map[string]struct{}, len(in))
-	out := make([]Triple, 0, len(in))
-	for _, t := range in {
-		k := fmt.Sprintf("%x", t.ID)
-		if _, ok := seen[k]; ok {
-			continue
-		}
-		seen[k] = struct{}{}
-		out = append(out, t)
-	}
-	return out
-}
-
-func (n *Node) sortByDistance(key string, nodes []Triple) []Triple {
-	keyBytes := []byte(key)
-
-	sort.Slice(nodes, func(i, j int) bool {
-		distI := XorDistance(keyBytes, nodes[i].ID)
-		distJ := XorDistance(keyBytes, nodes[j].ID)
-		return distI.Cmp(distJ) < 0
-	})
-
-	return nodes
-}
-
 type queryResult struct {
 	found bool
 	value []byte
@@ -182,8 +179,7 @@ func (n *Node) queryNode(contact Triple, key string, findValue bool) queryResult
 		msgType = "find_value"
 	}
 
-	// Correlation ID
-	var correlationID [20]byte
+	var correlationID [20]byte // Correlation ID
 	_, _ = rand.Read(correlationID[:])
 
 	// Register waiter
@@ -194,9 +190,10 @@ func (n *Node) queryNode(contact Triple, key string, findValue bool) queryResult
 	}
 	n.pending[correlationID] = respCh
 	n.pendingMu.Unlock()
+
 	defer func() {
 		n.pendingMu.Lock()
-		delete(n.pending, correlationID)
+		delete(n.pending, correlationID) // Clean up when done
 		n.pendingMu.Unlock()
 	}()
 
@@ -214,8 +211,7 @@ func (n *Node) queryNode(contact Triple, key string, findValue bool) queryResult
 		return queryResult{found: false}
 	}
 
-	// Wait for the correlated response
-	select {
+	select { // Wait for the correlated response
 	case resp := <-respCh:
 		return n.processQueryResponse(resp, findValue)
 	case <-time.After(5 * time.Second):

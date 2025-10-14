@@ -54,7 +54,7 @@ func (node *Node) handleFindNode(msg Message) error {
 
 	// Send response with same correlation ID
 	responseMsg := Message{
-		ID:          msg.ID, // Keep same correlation ID
+		ID:          msg.ID,
 		From:        node.Addr,
 		FromContact: Triple{ID: node.Id[:], Addr: node.Addr, Port: node.Addr.Port},
 		To:          msg.From,
@@ -74,11 +74,10 @@ func (node *Node) handleFindNodeResponse(msg Message) error {
 
 	node.routing.AddContact(msg.FromContact)
 
-	// Check if this is a correlated response
 	node.pendingMu.Lock()
-	if responseChan, exists := node.pending[msg.ID]; exists {
+	if responseChan, exists := node.pending[msg.ID]; exists { // Check if this is a correlated response
 		select {
-		case responseChan <- msg:
+		case responseChan <- msg: // Route to waiting queryNode() function
 			fmt.Printf("Routed find_node response to waiting query\n")
 		default:
 			fmt.Printf("Response channel full, dropping message\n")
@@ -124,7 +123,7 @@ func (node *Node) handleFindValue(msg Message) error {
 
 	// Send response with same correlation ID
 	responseMsg := Message{
-		ID:          msg.ID, // Keep same correlation ID
+		ID:          msg.ID,
 		From:        node.Addr,
 		FromContact: Triple{ID: node.Id[:], Addr: node.Addr, Port: node.Addr.Port},
 		To:          msg.From,
@@ -148,11 +147,10 @@ func (node *Node) handleFindValueResponse(msg Message) error {
 	}
 	node.routing.AddContact(correctedContact)
 
-	// Check if this is a correlated response
 	node.pendingMu.Lock()
-	if responseChan, exists := node.pending[msg.ID]; exists {
+	if responseChan, exists := node.pending[msg.ID]; exists { // Check if this is a correlated response
 		select {
-		case responseChan <- msg:
+		case responseChan <- msg: // Route to waiting queryNode() function
 			fmt.Printf("Routed response to waiting query\n")
 		default:
 			fmt.Printf("Response channel full, dropping message\n")

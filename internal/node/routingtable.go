@@ -2,6 +2,8 @@ package node
 
 import (
 	"bytes"
+	"crypto/sha1"
+	"encoding/hex"
 	"fmt"
 	"math/big"
 	"sort"
@@ -34,7 +36,12 @@ func (rt *RoutingTable) GetKClosest(key string, K int) []Triple {
 	rt.mu.RLock()
 	defer rt.mu.RUnlock()
 
-	keyBytes := []byte(key)
+	keyBytes, err := hex.DecodeString(key)
+	if err != nil || len(keyBytes) != IDLength {
+		sum := sha1.Sum([]byte(key))
+		keyBytes = sum[:]
+	}
+
 	type distTriple struct {
 		dist    *big.Int
 		contact Triple

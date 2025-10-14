@@ -2,6 +2,8 @@ package node
 
 import (
 	"crypto/rand"
+	"crypto/sha1"
+	"encoding/hex"
 	"fmt"
 	"sort"
 	"strings"
@@ -47,6 +49,16 @@ func (n *Node) IterativeStore(key string, value []byte) {
 	}
 }
 
+// decodeKeyBytes returns a 20-byte digest for distance calcs
+func decodeKeyBytes(key string) []byte {
+	kb, err := hex.DecodeString(strings.TrimSpace(key))
+	if err == nil && len(kb) == 20 {
+		return kb
+	}
+	sum := sha1.Sum([]byte(key))
+	return sum[:]
+}
+
 // NodeLookup
 func (n *Node) nodeLookup(key string, findValue ...bool) ([]Triple, []byte, bool) {
 	isValueSearch := len(findValue) > 0 && findValue[0]
@@ -58,11 +70,15 @@ func (n *Node) nodeLookup(key string, findValue ...bool) ([]Triple, []byte, bool
 	// Track queried nodes by address string
 	queried := make(map[string]bool, len(shortlist))
 
+	keyBytes := decodeKeyBytes(key)
+
 	for {
 		fmt.Printf("----------\n")
 		fmt.Printf("New iteration of nodeLookup.Shortlist:\n")
 		for _, node := range shortlist {
 			fmt.Printf("%s\n", node.String())
+			fmt.Printf(" - keyBytes: %s\n", keyBytes)
+			fmt.Printf(" - Distance to key: %s\n", XorDistance(keyBytes, node.ID).Text(2))
 		}
 		fmt.Printf("----------\n")
 
